@@ -1,0 +1,2389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WORDSTEROIDS — prototype</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=VT323&family=Major+Mono+Display&display=swap');
+
+  :root {
+    --bg: #05060a;
+    --bg-2: #0a0d18;
+    --ink: #e6f1ff;
+    --dim: #6b7a99;
+    --neon: #ff2d6f;          /* hot pink — default weapon */
+    --neon-2: #00ffe0;         /* cyan — shield */
+    --neon-3: #ffd23f;         /* yellow — king */
+    --pw-spread: #ff8c1a;     /* orange — spread weapon */
+    --pw-pierce: #d65bff;     /* magenta — pierce */
+    --pw-boost: #5aff7c;      /* green — boost */
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'VT323', monospace;
+    overflow: hidden;
+    cursor: none;
+  }
+
+  #game { position: absolute; inset: 0; display: block; }
+
+  .hud {
+    position: absolute;
+    top: 16px; left: 18px;
+    z-index: 10;
+    pointer-events: none;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+  }
+  .hud .title {
+    font-family: 'Major Mono Display', monospace;
+    font-size: 22px;
+    color: var(--neon);
+    text-shadow: 0 0 12px rgba(255,45,111,0.7);
+    letter-spacing: 0.25em;
+  }
+  .hud .sub { font-size: 18px; color: var(--dim); margin-top: 4px; }
+  .hud .stat {
+    margin-top: 10px;
+    font-size: 22px;
+    color: var(--neon-2);
+    text-shadow: 0 0 8px rgba(0,255,224,0.5);
+  }
+  .hud .stat.king { color: var(--neon-3); text-shadow: 0 0 10px rgba(255,210,63,0.6); }
+  .hud .powerup {
+    margin-top: 10px;
+    font-size: 20px;
+    letter-spacing: 0.1em;
+    display: none;
+  }
+  .hud .powerup.show { display: block; }
+  .hud .powerup .bar {
+    margin-top: 4px;
+    width: 180px;
+    height: 6px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .hud .powerup .fill {
+    height: 100%;
+    width: 100%;
+    transition: width 0.2s linear;
+  }
+
+  .leaderboard {
+    position: absolute;
+    top: 16px; right: 18px;
+    z-index: 10;
+    pointer-events: none;
+    font-size: 20px;
+    text-align: right;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+  .leaderboard h3 { color: var(--dim); font-size: 14px; margin-bottom: 6px; }
+  .leaderboard .row { color: var(--ink); }
+  .leaderboard .row.king { color: var(--neon-3); text-shadow: 0 0 8px rgba(255,210,63,0.6); }
+  .leaderboard .row.you { color: var(--neon-2); }
+  .leaderboard .row.dead { color: var(--dim); text-decoration: line-through; }
+
+  /* Banner (short level title) */
+  .banner {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 12;
+    text-align: center;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.4s;
+    font-family: 'Major Mono Display', monospace;
+  }
+  .banner.show { opacity: 1; }
+  .banner .big {
+    font-size: 64px;
+    color: var(--neon);
+    text-shadow: 0 0 20px rgba(255,45,111,0.7);
+    letter-spacing: 0.15em;
+  }
+  .banner .small {
+    font-size: 22px;
+    color: var(--ink);
+    margin-top: 10px;
+    letter-spacing: 0.2em;
+    font-family: 'VT323', monospace;
+  }
+
+  /* Level toast — small, bottom-center, non-obstructing */
+  .intro {
+    position: absolute;
+    left: 50%;
+    bottom: 28px;
+    transform: translate(-50%, 12px);
+    z-index: 14;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.4s, transform 0.4s;
+    text-align: center;
+    padding: 10px 26px;
+    border: 1px solid rgba(255,45,111,0.4);
+    background: linear-gradient(180deg, rgba(20,24,38,0.92), rgba(8,10,18,0.92));
+    box-shadow: 0 0 24px rgba(255,45,111,0.18);
+    backdrop-filter: blur(2px);
+    max-width: 540px;
+  }
+  .intro.show {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  .intro .level-tag {
+    font-family: 'Major Mono Display', monospace;
+    color: var(--neon);
+    font-size: 14px;
+    letter-spacing: 0.35em;
+    text-shadow: 0 0 10px rgba(255,45,111,0.5);
+    padding-left: 0.35em;
+  }
+  .intro .title {
+    font-family: 'Major Mono Display', monospace;
+    font-size: 18px;
+    letter-spacing: 0.2em;
+    color: var(--ink);
+    margin-top: 4px;
+    padding-left: 0.2em;
+  }
+  .intro .pw-desc {
+    font-size: 16px;
+    color: var(--dim);
+    margin-top: 4px;
+    letter-spacing: 0.08em;
+  }
+  /* Hide unused fragments from the old card layout */
+  .intro .pw-name, .intro .continue { display: none; }
+
+
+  /* Death overlay */
+  .death {
+    position: absolute;
+    inset: 0;
+    z-index: 11;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(5,6,10,0.55);
+    font-family: 'Major Mono Display', monospace;
+    color: var(--neon);
+    text-shadow: 0 0 14px rgba(255,45,111,0.8);
+    font-size: 56px;
+    letter-spacing: 0.2em;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .death.show { opacity: 1; }
+  .death .respawn {
+    margin-top: 18px;
+    font-family: 'VT323', monospace;
+    font-size: 26px;
+    color: var(--neon-2);
+    text-shadow: 0 0 8px rgba(0,255,224,0.5);
+    letter-spacing: 0.1em;
+  }
+  .death .run-stats {
+    margin-top: 14px;
+    font-family: 'VT323', monospace;
+    font-size: 22px;
+    color: var(--dim);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+  .death .run-stats .lost {
+    color: var(--neon);
+    text-shadow: 0 0 8px rgba(255,45,111,0.5);
+  }
+
+  .help {
+    position: absolute;
+    bottom: 16px; left: 18px;
+    z-index: 10;
+    pointer-events: none;
+    color: var(--dim);
+    font-size: 18px;
+    letter-spacing: 0.1em;
+  }
+  .help kbd {
+    background: rgba(0,255,224,0.08);
+    border: 1px solid rgba(0,255,224,0.25);
+    color: var(--neon-2);
+    padding: 0 6px;
+    border-radius: 3px;
+    font-family: 'VT323', monospace;
+  }
+
+  /* Loading overlay (dictionary fetch) */
+  .loading {
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(ellipse at center, #0a0d18 0%, #03040a 100%);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.4s;
+  }
+  .loading.show { opacity: 1; pointer-events: auto; }
+  .loading-card { text-align: center; }
+  .loading-title {
+    font-family: 'Major Mono Display', monospace;
+    font-size: 36px;
+    letter-spacing: 0.3em;
+    color: var(--neon);
+    text-shadow: 0 0 16px rgba(255,45,111,0.7);
+    margin-bottom: 30px;
+    padding-left: 0.3em;
+  }
+  .loading-spinner {
+    width: 36px;
+    height: 36px;
+    margin: 0 auto 18px;
+    border: 2px solid rgba(0,255,224,0.15);
+    border-top-color: var(--neon-2);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-msg {
+    color: var(--neon-2);
+    font-size: 22px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    text-shadow: 0 0 8px rgba(0,255,224,0.4);
+  }
+  .loading-sub {
+    color: var(--dim);
+    font-size: 16px;
+    letter-spacing: 0.1em;
+    margin-top: 8px;
+  }
+
+  .vignette {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 5;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%);
+  }
+  .scanlines {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 6;
+    background: repeating-linear-gradient(to bottom, rgba(255,255,255,0.02) 0 1px, transparent 1px 3px);
+    mix-blend-mode: overlay;
+    opacity: 0.6;
+  }
+
+  /* Top-center high score banner — shiny gold space letters */
+  .highscore {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    pointer-events: none;
+    text-align: center;
+    font-family: 'Major Mono Display', monospace;
+    user-select: none;
+  }
+  .highscore .label {
+    font-size: 12px;
+    letter-spacing: 0.55em;
+    color: rgba(255, 220, 130, 0.65);
+    text-shadow: 0 0 8px rgba(255, 200, 80, 0.3);
+    margin-bottom: 4px;
+    padding-left: 0.55em; /* offset for letter-spacing visual centering */
+  }
+  .highscore .value {
+    font-size: 44px;
+    letter-spacing: 0.18em;
+    /* Metallic gold gradient with shimmer */
+    background: linear-gradient(
+      180deg,
+      #fff4c2 0%,
+      #ffd23f 28%,
+      #b8860b 50%,
+      #ffd23f 72%,
+      #fff4c2 100%
+    );
+    background-size: 100% 200%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    /* Outer glow + drop shadow for depth */
+    filter:
+      drop-shadow(0 0 14px rgba(255, 200, 70, 0.55))
+      drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+    animation: goldShimmer 4s ease-in-out infinite;
+    padding-left: 0.18em;
+  }
+  /* Tiny twinkling starlets bracketing the score */
+  .highscore .value::before,
+  .highscore .value::after {
+    content: '✦';
+    font-family: serif;
+    font-size: 16px;
+    color: #fff4c2;
+    -webkit-text-fill-color: #fff4c2;
+    margin: 0 14px;
+    vertical-align: middle;
+    text-shadow: 0 0 8px #ffd23f, 0 0 16px rgba(255, 200, 70, 0.6);
+    animation: twinkle 2.4s ease-in-out infinite;
+  }
+  .highscore .value::after { animation-delay: 1.2s; }
+
+  @keyframes goldShimmer {
+    0%, 100% { background-position: 50% 0%; }
+    50% { background-position: 50% 100%; }
+  }
+  @keyframes twinkle {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.7); }
+  }
+
+  /* "NEW HIGH SCORE!" celebration pulse */
+  .highscore.beat .value {
+    animation: goldShimmer 4s ease-in-out infinite, beatPulse 0.6s ease-out;
+  }
+  @keyframes beatPulse {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.18); filter: drop-shadow(0 0 28px rgba(255,255,255,0.9)) drop-shadow(0 2px 4px rgba(0,0,0,0.6)); }
+    100% { transform: scale(1); }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+
+<div class="highscore" id="highscore">
+  <div class="label">HIGH SCORE</div>
+  <div class="value" id="highscoreValue">0</div>
+</div>
+
+<div class="hud">
+  <div class="title">Wordsteroids</div>
+  <div class="sub">// prototype build 0.2</div>
+  <div class="stat" id="levelText">LEVEL 1 — LETTERS</div>
+  <div class="powerup" id="powerupBox">
+    <div id="powerupLabel"></div>
+    <div class="bar"><div class="fill" id="powerupFill"></div></div>
+  </div>
+</div>
+
+<div class="leaderboard" id="leaderboard">
+  <h3>// leaderboard</h3>
+</div>
+
+<div class="banner" id="banner">
+  <div class="big" id="bannerBig">LEVEL 1</div>
+  <div class="small" id="bannerSmall">single letters — type the letter on each side</div>
+</div>
+
+<div class="intro" id="intro">
+  <div class="level-tag" id="introLevelTag">LEVEL 1</div>
+  <div class="title" id="introTitle">LETTERS</div>
+  <div class="pw-desc" id="introPwDesc"></div>
+</div>
+
+<div class="death" id="death">
+  RUN ENDED
+  <div class="run-stats" id="runStats">score 0 lost</div>
+  <div class="respawn" id="respawnText">new run in 3...</div>
+</div>
+
+<div class="loading" id="loading">
+  <div class="loading-card">
+    <div class="loading-title">WORDSTEROIDS</div>
+    <div class="loading-spinner"></div>
+    <div class="loading-msg">loading dictionary...</div>
+    <div class="loading-sub">~370,000 words incoming</div>
+  </div>
+</div>
+
+<div class="vignette"></div>
+<div class="scanlines"></div>
+
+<script>
+// ============================================================
+// WORDSTEROIDS — prototype 0.2
+// ============================================================
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+let W = window.innerWidth;
+let H = window.innerHeight;
+function resize() {
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = W; canvas.height = H;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// World grows with level. BASE_WORLD is the level-1 size; WORLD is current.
+const BASE_WORLD = { w: 4000, h: 3000 };
+const WORLD = { w: BASE_WORLD.w, h: BASE_WORLD.h };
+const WORLD_GROWTH_PER_LEVEL = 0.15; // 15% bigger per level (linear)
+
+// LEVEL_CONFIG is built dynamically by buildLevelConfig() once the dictionary loads.
+// Each level has: { n, label, sub, wordLength, scoreToAdvance }
+
+// Powerups: pickup is FREE, but you must have at least `requires` score to collect.
+// Higher-tier powerups need higher scores, capping at game-changing ridiculous ones.
+const POWERUP_DEFS = {
+  shield: {
+    name: 'SHIELD', color: '#00ffe0', requires: 5,
+    desc: 'absorbs one hit. lasts until used.',
+    duration: 0, // not used — shield is persistent
+    type: 'passive',
+  },
+  boost: {
+    name: 'BOOST', color: '#5aff7c', requires: 5,
+    desc: 'thrust 2× stronger, less drift.',
+    duration: 20,
+    type: 'passive',
+  },
+  spread: {
+    name: 'SPREAD', color: '#ff8c1a', requires: 8,
+    desc: 'fire = 3-bullet fan.',
+    duration: 20,
+    type: 'weapon',
+  },
+  blast: {
+    name: 'BLAST', color: '#d65bff', requires: 8,
+    desc: 'fire = short-range shockwave.',
+    duration: 20,
+    type: 'weapon',
+  },
+  multishot: {
+    name: 'MULTI', color: '#3aa0ff', requires: 15,
+    desc: 'fire = bullets from all 4 sides at once.',
+    duration: 20,
+    type: 'weapon',
+  },
+  phantom: {
+    name: 'PHANTOM', color: '#a06bff', requires: 20,
+    desc: 'bots can barely see you. semi-invisible.',
+    duration: 20,
+    type: 'passive',
+  },
+  vampire: {
+    name: 'VAMPIRE', color: '#ff3050', requires: 25,
+    desc: 'each kill refreshes your invuln shield.',
+    duration: 20,
+    type: 'passive',
+  },
+  nuke: {
+    name: 'NUKE', color: '#fff4c2', requires: 40,
+    desc: 'fire = annihilate every living enemy.',
+    duration: 20,
+    type: 'weapon',
+  },
+};
+
+// ----- Word pools -----
+// ============================================================
+// WORD SYSTEM
+// ============================================================
+// Curated tiers (highest priority): space + video games + funny.
+// General dictionary is fetched at boot and bucketed by length.
+//
+// pickShipWords(lvl) returns 5 words of length === lvl with unique first letters.
+// For each slot we roll a tier (50% space/games, 25% funny, 25% general).
+// If the rolled tier has no word of that length+letter, we fall back to the next.
+// ============================================================
+
+const CURATED = {
+  // SPACE — astronomy, sci-fi, ships, cosmology
+  space: [
+    'a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z',
+    'ai','io','ufo','sun','moon','star','mars','luna','nova','dust','dark','warp','beam','core','bolt','bay','cell','crew','dock','ebon','eden','exit','fuel','flux','foil','gas','grav','helm','hull','ion','jet','lens','lift','mass','mist','muon','navy','node','orb','path','pole','port','prow','quad','quasar','rad','ray','red','rim','rove','scan','silo','solar','tech','tow','tug','void','warp','wave','wing','xeno','yarn','zone','zero','zoom',
+    'orbit','comet','crater','cosmos','cobra','crash','cosmic','cipher','crown','cruise','cruiser','cosmonaut','crater',
+    'galaxy','gamma','glide','gravity','geode','geosphere','genesis',
+    'helix','hyper','horizon','helmet','hatch','hover','heatshield',
+    'impact','inertia','infrared','interstellar','ignite','impulse',
+    'kepler','kelvin','kerosene','keplerian',
+    'launch','laser','lunar','launchpad','lightyear','luminous','lasergun',
+    'meteor','module','magnet','meridian','mainsail','mercury','mission',
+    'nebula','neutron','nova','nucleus','navigator','nightside',
+    'orbital','oxygen','observatory','onslaught','outerspace','outpost','onboard',
+    'plasma','planet','phantom','propulsion','probe','pulsar','parsec','phoenix','photon','photonic','perigee','perihelion','propellant',
+    'quasar','quantum','quark','quench','quintuple',
+    'rocket','radar','radio','radiation','reentry','retrograde','retrofire','rover','roscosmos',
+    'satellite','spaceship','starship','space','station','sunspot','solar','starlight','supernova','singularity','spacewalk','spacesuit','stargate','starbase','stardust','spaceport','starfighter',
+    'thrust','thruster','telescope','tachyon','telemetry','terraform','transmit','trajectory',
+    'umbra','universe','undock','umbral','uplink',
+    'vacuum','vector','venus','volley','voyager','vortex','vehicle',
+    'wormhole','wavelength','warp','warpdrive','warpcore',
+    'xenon','xenith',
+    'yawn','yield','yacht',
+    'zenith','zodiac','zephyr','zircon','zerogravity',
+    'andromeda','antimatter','asteroid','astronaut','astronomer','astronomy','astrophysics','aurora','airlock','apogee',
+    'blackhole','bigbang','beacon','battlestar','battleship','blastoff','booster','blueshift',
+    'cosmonaut','constellation','centrifuge','crewmember','countdown','capsule',
+    'docking','darkmatter','dwarfstar','dyson',
+    'exoplanet','event','escape','eclipse','electromagnetic','emission',
+    'frontier','firmament','flightdeck','flyby','futurama',
+    'galactic','gargantuan','geomagnetic','gravitywell',
+    'heliosphere','heliopause','hyperspace','heliocentric','heliographic',
+    'interstellar','intergalactic','infinity','ionosphere','imperial',
+    'jupiter','jettison','jovian',
+    'krypton','kessler',
+    'lagrangian','lightspeed','liftoff',
+    'magnetar','milkyway','meteorite','mothership','mooncrater','multiverse','microgravity',
+    'neptune','newhorizons',
+    'observatory','outerspace','overdrive',
+    'planetarium','perigee','perihelion','plutonium','progenitor','protostar','propellant',
+    'quintessence',
+    'redshift','refueling','retrograde','reentry','radioactive','radiosignal','retrothrust',
+    'spacestation','spacecraft','solarsystem','singularity','supercluster','spaceflight','spacetime','spacewalker','starcluster','stargazer','stellar','stratosphere','stratosphere',
+    'telescopic','teleport','thermosphere','transorbital',
+    'ultraviolet','universe','uranus',
+    'velocity','venusian','vehicular','vacuumchamber',
+    'whitedwarf','wormhole',
+    'xenobiology','xerographic',
+  ],
+
+  // VIDEO GAMES — gaming culture, mechanics, slang
+  games: [
+    'a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z',
+    'gg','xp','op','rp','dps','pvp','pve','dot','hp','mp',
+    'aim','arc','axe','bow','bot','cap','co','do','duo','elf','exp','farm','frag','game','goal','grab','grim','heal','hex','hit','jab','jam','jump','keep','kit','lag','lan','lap','loot','mage','mana','mass','meta','miss','mod','nerf','noob','orb','pace','pact','park','pawn','pick','plot','poke','pose','prep','quest','race','rage','raid','rare','rank','rest','revive','rng','roll','room','run','save','scan','seek','skin','slay','slide','slime','slot','smith','snipe','soul','spam','spawn','stat','stun','sub','swap','swift','tag','tank','task','team','test','tier','tomb','tool','trap','turn','tutor','twin','use','user','wand','warp','ward','wave','well','wing','win','wire','xp','yawn','yarn','yeet','zap','zone',
+    'attack','agility','arena','armor','assist','avatar','aggro',
+    'boost','beast','blade','blast','blink','boss','build','bonus','battle','barbarian','barricade',
+    'combo','combat','crit','clutch','controller','console','cutscene','contest','captures','class','crafting','content','crush','curse',
+    'damage','death','defend','defense','demo','dodge','doom','dragon','dungeon','duel','drop','dungeoneer','daggers',
+    'engage','engine','energy','enemy','equip','enchant','endgame','encounter','endure','event','exit',
+    'fight','final','finale','finisher','fortress','frenzy','flag','flank','fragment','frostbite','flask',
+    'gauntlet','glory','glitch','grind','goblin','golem','gnoll','gear','goal','genre','guard','guild','gladiator',
+    'health','helmet','heist','heroic','hero','headshot','hardcore','hover',
+    'invade','impale','inventory','indie','idle','imp','invincible','immortal','intro',
+    'joust','jaw','journey','jewel',
+    'kill','knight','kingpin','kindle','knockout','keystone','kobold',
+    'level','laser','launch','legacy','legend','legendary','lava','lich','loot','lobby','lockout',
+    'mage','melee','minion','mission','monster','master','mecha','melt','match','manor','mage',
+    'noob','ninja','nemesis','nuke','nightmare','nightly',
+    'orc','onslaught','overlord','outpost','outlaw','overdrive','offline','online',
+    'pirate','platform','player','potion','power','press','prowl','puzzle','pwned',
+    'quake','quest','quick','quill','quench',
+    'ranger','raider','rebel','reload','respawn','revive','rocket','roleplay','rune','rouge','rush',
+    'sigil','snipe','sniper','sword','shield','shooter','speedrun','spawn','strike','smash','speedhack','startup','stealth','strafe',
+    'tank','target','thief','toxic','treasure','trap','troll','trophy','tyrant','tutorial','tank','target','tournament','team',
+    'undead','unique','upgrade','unlock','unstoppable','useable',
+    'victory','venom','viper','victor','valor','vault','volley',
+    'warrior','wizard','warlord','weapon','wraith','wand','wave','warp','wargame','warzone',
+    'xp','xenomorph',
+    'yield','yellow',
+    'zombie','zealot','zigzag','zoned','zoomies',
+    'achievement','adventure','annihilate','assassin','autoaim','arcade','asynchronous',
+    'battlefield','battlepass','breakthrough','blockade','battlestation','botmatch','bossfight','beatemup',
+    'campaign','catastrophe','character','checkpoint','collectible','controller','crossplay','cutscene','crouchjump',
+    'damageover','dungeoneer','damageboost','deathmatch','difficulty','dungeoncrawler',
+    'experience','extralife','endgame',
+    'firebrand','firewall','firepower','frontline','franchise','firefight',
+    'gamepad','gameplay','gauntlet','gunfighter','gigabyte',
+    'highscore','headshot','hyperdrive','hyperjump',
+    'intercept','invincible','infiltrate','inventory','invincibility',
+    'juggernaut','justify','jurisdiction',
+    'killstreak','killshot','kingdom','knockdown',
+    'leaderboard','levelup','launchpad','loadout','longbow','legendary',
+    'massacre','minimap','multiplayer','mainboss','machinegun','marauder',
+    'newgame','navigator','notorious','nightvision',
+    'objective','overpower','onslaught','offensive','overlord','overworld',
+    'powerup','powerful','platinum','playthrough','protagonist',
+    'questline',
+    'respawn','renegade','revenge','rocketlauncher','roleplay',
+    'savepoint','speedrun','strategy','stronghold','superboss','superpower','starsystem',
+    'teleport','tournament','tournament','treachery','trapdoor','triplekill','triumph',
+    'unlimited','unstoppable','unkillable',
+    'velocity','vendetta','victorious','vigilante',
+    'wavelength','warmaster','warzone','wreckage',
+    'xenophobe',
+    'yellowbelt',
+    'zerglings','zombiehorde',
+  ],
+
+  // FUNNY — silly, playful, onomatopoeic, fun-to-say words
+  funny: [
+    'a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z',
+    'oof','wow','hmm','huh','aha','meh','yip','yap','blob','blip','bonk','bork','burp','clop','dink','flap','flop','floof','glop','goof','gulp','honk','hoot','klop','mew','moo','nope','nub','oof','pew','plop','poof','pop','puff','quack','snip','snug','splat','swap','toot','wiggle','wonk','yeet','zonk',
+    'wobble','noodle','jiggle','wiggle','squiggle','snazzy','snappy','sloppy','snazzy','sneaky','silly','sassy','sappy','smelly','smushy','snobby','soggy','spiffy','stinky','stuffy','sturdy','swanky','tacky','tipsy','trendy','tubby','twerpy','twirly','wacky','whacky','whimsy','woolly','wormy','wussy','yappy','yucky','zany','zippy',
+    'bamboozle','flummox','kerfuffle','shenanigan','lollygag','hooligan','bumblebee','cantankerous','curmudgeon','discombobulate','flabbergast','floccinaucinihilipilification','gobbledygook','gobsmacked','gargantuan','hippopotamus','hodgepodge','hullabaloo','jibberjabber','kerplunk','knickknack','lickety','malarkey','mishmash','mumbo','nincompoop','obfuscate','persnickety','pumpernickel','quibble','rapscallion','shenanigans','skedaddle','snickerdoodle','snollygoster','snooty','snorkel','splendiferous','squabble','tomfoolery','whippersnapper','whatchamacallit','wishywashy','yokel','zigzag',
+    'bongo','dingo','flamingo','gizmo','jumbo','limbo','mango','tango','tofu','yoyo',
+    'bouncy','crunchy','fluffy','frumpy','gloopy','goopy','goosey','hoppy','jolly','jumpy','knobby','lumpy','marshy','mucky','peppy','perky','plucky','poppy','pulpy','ritzy','roomy','sloppy','snazzy','snippy','snooty','soapy','soggy','sparkly','spongy','squashy','squishy','stripy','stubby','sudsy','swirly','tangy','wormy','zesty','zippy',
+    'bafflement','befuddle','bewilder','bonkers','bumpkin','codswallop','collywobbles','crinkle','crumpet','dilly','dinghy','doohickey','doozie','dweeb','flapjack','flibbertigibbet','frou','galoshes','gunky','huzzah','jamboree','jibbet','kabob','kaput','kazoo','kibosh','kit','kazoo','lazybones','lopsided','lummox','muumuu','newt','nincompoop','noggin','noodle','nudnik','oddball','ouchie','peewee','piffle','pizzazz','poppycock','razzle','razzmatazz','schlep','schmooze','scrumptious','smithereens','snazzy','snickerdoodle','snippet','snurfle','squee','squelch','squiggle','tatty','thingamabob','thingamajig','tipsy','tuxedo','twiddle','twinkletoes','umpteen','wallop','whatnot','whippet','wibble','widget','wonky','xylophone','yippee','zebra','zinger',
+  ],
+};
+
+// Dictionary: filled on boot from fetched word list, bucketed by length.
+// Map<number, string[]>
+const DICT_BY_LENGTH = new Map();
+let DICT_MAX_LENGTH = 15; // updated when dictionary loads
+let dictReady = false;
+
+// Curated by length (built on boot) — Map<themeName, Map<length, string[]>>
+const CURATED_BY_LENGTH = {
+  space: new Map(),
+  games: new Map(),
+  funny: new Map(),
+};
+
+// Bucket curated lists by length
+function bucketCurated() {
+  for (const theme of Object.keys(CURATED)) {
+    const m = CURATED_BY_LENGTH[theme];
+    for (const w of new Set(CURATED[theme])) {
+      const cleaned = w.toLowerCase().replace(/[^a-z]/g, '');
+      if (!cleaned) continue;
+      const len = cleaned.length;
+      if (!m.has(len)) m.set(len, []);
+      m.get(len).push(cleaned);
+    }
+  }
+}
+bucketCurated();
+
+// Profanity blocklist (small, coarse — better to over-filter)
+const PROFANITY = new Set([
+  'fuck','fucking','fucked','fucker','shit','shitty','shitting','cunt','cock','cocks','dick','dicks','piss','pissed','pissing','tits','tit','asshole','assholes','bitch','bitches','bitching','bastard','bastards','damn','damned','damnit','goddamn','crap','crappy','prick','pricks','slut','sluts','whore','whores','wanker','bollocks','bullshit',
+  'nigger','nigga','niggers','niggas','faggot','faggots','fag','fags','retard','retards','retarded','spic','spics','kike','kikes','chink','chinks','wetback','wetbacks',
+  'porn','porno','penis','vagina','boob','boobs','nipple','nipples','horny','sex','sexy','cum','cums','jerkoff',
+  'kill','rape','rapist','suicide','murder','murderer',
+]);
+
+function isCleanWord(w) {
+  if (!w || w.length < 1) return false;
+  if (!/^[a-z]+$/.test(w)) return false;
+  if (PROFANITY.has(w)) return false;
+  return true;
+}
+
+// Fetch the dictionary at boot. Falls back gracefully if offline.
+async function loadDictionary() {
+  const url = 'https://cdn.jsdelivr.net/gh/dwyl/english-words@master/words_alpha.txt';
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('dict fetch failed: ' + res.status);
+    const text = await res.text();
+    let count = 0, maxLen = 0;
+    for (const raw of text.split('\n')) {
+      const w = raw.trim().toLowerCase();
+      if (!isCleanWord(w)) continue;
+      const len = w.length;
+      if (!DICT_BY_LENGTH.has(len)) DICT_BY_LENGTH.set(len, []);
+      DICT_BY_LENGTH.get(len).push(w);
+      if (len > maxLen) maxLen = len;
+      count++;
+    }
+    DICT_MAX_LENGTH = Math.min(maxLen, 28); // cap reasonably
+    dictReady = true;
+    return { count, maxLen };
+  } catch (e) {
+    // Fallback: synthesize a dictionary from the curated lists themselves
+    console.warn('dictionary load failed, using curated-only fallback:', e);
+    let maxLen = 0;
+    for (const theme of Object.keys(CURATED_BY_LENGTH)) {
+      for (const [len, arr] of CURATED_BY_LENGTH[theme]) {
+        if (!DICT_BY_LENGTH.has(len)) DICT_BY_LENGTH.set(len, []);
+        for (const w of arr) DICT_BY_LENGTH.get(len).push(w);
+        if (len > maxLen) maxLen = len;
+      }
+    }
+    DICT_MAX_LENGTH = Math.min(maxLen, 20);
+    dictReady = true;
+    return { count: 0, maxLen, fallback: true };
+  }
+}
+
+function randFrom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+// Pick a word of exactly `targetLen` letters, with first letter NOT in `excludeFirsts`.
+// Weighted: 50% space, 25% games, 25% funny+general (split). Falls through tiers.
+function pickWordOfLength(targetLen, excludeFirsts) {
+  // Shuffle the priority order each call for variety, but keep weights.
+  const tiers = [];
+  const r = Math.random();
+  if (r < 0.30) tiers.push('space','games','funny','general');
+  else if (r < 0.55) tiers.push('games','space','funny','general');
+  else if (r < 0.75) tiers.push('funny','space','games','general');
+  else tiers.push('general','space','games','funny');
+
+  for (const tier of tiers) {
+    let pool;
+    if (tier === 'general') pool = DICT_BY_LENGTH.get(targetLen);
+    else pool = CURATED_BY_LENGTH[tier].get(targetLen);
+    if (!pool || pool.length === 0) continue;
+    // Try up to 30 random samples from this tier
+    for (let i = 0; i < 30; i++) {
+      const cand = pool[Math.floor(Math.random() * pool.length)];
+      if (!excludeFirsts.has(cand[0])) return cand;
+    }
+    // Linear scan fallback within this tier
+    const shuffled = pool.slice().sort(() => Math.random() - 0.5);
+    for (const cand of shuffled) {
+      if (!excludeFirsts.has(cand[0])) return cand;
+    }
+  }
+  return null;
+}
+
+function pickShipWords(lvl) {
+  const cfg = LEVEL_CONFIG[lvl - 1];
+  const targetLen = cfg.wordLength;
+  const used = new Set();
+  const result = [];
+  let safety = 0;
+  while (result.length < 5 && safety++ < 30) {
+    const cand = pickWordOfLength(targetLen, used);
+    if (!cand) break;
+    used.add(cand[0]);
+    result.push(cand);
+  }
+  // If we couldn't fill 5 (very unlikely), pad from any tier ignoring first-letter rule
+  if (result.length < 5) {
+    const allOfLen = (DICT_BY_LENGTH.get(targetLen) || []).slice();
+    for (const t of Object.keys(CURATED_BY_LENGTH)) {
+      const arr = CURATED_BY_LENGTH[t].get(targetLen);
+      if (arr) allOfLen.push(...arr);
+    }
+    while (result.length < 5 && allOfLen.length > 0) {
+      result.push(allOfLen[Math.floor(Math.random() * allOfLen.length)]);
+    }
+    while (result.length < 5) result.push('a');
+  }
+  return { up: result[0], down: result[1], left: result[2], right: result[3], fire: result[4] };
+}
+
+// ============================================================
+// LEVEL CONFIG — generated dynamically once dictionary loads.
+// 1 level per length, advancing requires more kills each tier.
+// ============================================================
+let LEVEL_CONFIG = [];
+
+function buildLevelConfig() {
+  // Score thresholds: 5, 10, 18, 28, 40, 54, 70, 88, 108, 130, ...
+  // Each level adds (5 + 2 * (n-1)) more score than previous.
+  const thresholds = [];
+  let total = 0;
+  for (let n = 1; n <= 40; n++) {
+    total += 5 + 2 * (n - 1);
+    thresholds.push(total);
+  }
+
+  LEVEL_CONFIG = [];
+  for (let len = 1; len <= DICT_MAX_LENGTH; len++) {
+    // Skip lengths that have no available words at all
+    const hasGen = (DICT_BY_LENGTH.get(len) || []).length > 0;
+    let hasCurated = false;
+    for (const t of Object.keys(CURATED_BY_LENGTH)) {
+      if ((CURATED_BY_LENGTH[t].get(len) || []).length > 0) { hasCurated = true; break; }
+    }
+    if (!hasGen && !hasCurated) continue;
+
+    const n = LEVEL_CONFIG.length + 1;
+    const isLast = false; // we'll patch the last one after the loop
+    LEVEL_CONFIG.push({
+      n,
+      label: `LEVEL ${n} — ${len} LETTER${len === 1 ? '' : 'S'}`,
+      sub: len === 1
+        ? 'single letters — type the letter on each side'
+        : `${len}-letter words — type the word on each side`,
+      wordLength: len,
+      scoreToAdvance: thresholds[n - 1] || (thresholds[thresholds.length - 1] + 50 * (n - thresholds.length)),
+    });
+  }
+  // Final level never advances
+  if (LEVEL_CONFIG.length > 0) {
+    LEVEL_CONFIG[LEVEL_CONFIG.length - 1].scoreToAdvance = Infinity;
+  }
+}
+
+// ----- Stars -----
+const stars = [];
+for (let i = 0; i < 220; i++) {
+  stars.push({
+    x: Math.random() * WORLD.w,
+    y: Math.random() * WORLD.h,
+    r: Math.random() * 1.6 + 0.2,
+    layer: Math.random() < 0.5 ? 0.4 : (Math.random() < 0.7 ? 0.7 : 1.0),
+    twinkle: Math.random() * Math.PI * 2,
+  });
+}
+
+// ----- Wrap-aware distance helpers -----
+// Shortest delta between two world coords accounting for wrap
+function wrapDelta(a, b, span) {
+  let d = b - a;
+  if (d > span / 2) d -= span;
+  if (d < -span / 2) d += span;
+  return d;
+}
+
+// Score-to-size growth (logarithmic — fast early, slow later)
+// At score 0 -> baseSize, climbs toward maxSize asymptotically.
+function sizeForScore(score, baseSize, maxSize) {
+  const growth = Math.log(1 + score / 3) * 20; // tunable: log curve
+  return Math.min(maxSize, baseSize + growth);
+}
+
+// Display helper — show 1 decimal place
+function fmtScore(s) { return s.toFixed(1); }
+
+// ----- Ship -----
+class Ship {
+  constructor(opts) {
+    this.id = opts.id;
+    this.name = opts.name;
+    this.isPlayer = !!opts.isPlayer;
+    this.x = opts.x; this.y = opts.y;
+    this.vx = (Math.random() - 0.5) * 60;
+    this.vy = (Math.random() - 0.5) * 60;
+    this.color = opts.color;
+    this.score = 0;
+    this.alive = true;
+    this.respawnAt = 0;
+    this.lastDir = { x: 1, y: 0 };
+    // Size grows with score (roguelike: bigger = easier to hit)
+    this.baseSize = 36;
+    this.maxSize = 90;
+    this.size = this.baseSize;
+    this.words = pickShipWords(level);
+    this.botCooldown = 2 + Math.random() * 4; // initial idle delay (level 1 friendly)
+    this.fireCooldown = 0;
+    this.flashAt = 0;
+    this.thrustAt = 0;
+    // Powerup state
+    this.activePowerup = null; // { key, expiresAt }
+    this.shieldHP = 0; // shield consumes a hit
+    // Spawn invulnerability — 3 seconds so you can orient before getting shot
+    this.killShieldUntil = performance.now() + 3000;
+  }
+
+  isKing() { return king && king.id === this.id; }
+  resetWords() {
+    this.words = pickShipWords(level);
+    if (this.isPlayer) typedBuffer = '';
+  }
+
+  // Returns weapon color for the firing edge & bullets
+  weaponColor() {
+    if (this.isKing()) return '#ffd23f';
+    if (this.activePowerup) {
+      const def = POWERUP_DEFS[this.activePowerup.key];
+      if (def.type === 'weapon') return def.color;
+    }
+    return this.color === '#00ffe0' ? '#ff2d6f' : this.color; // player's default weapon = pink
+  }
+
+  // Effective hitbox half-size = the visible square. (Hitbox always matches the ship.)
+  hitHalf() {
+    return this.size / 2;
+  }
+
+  applyPowerup(key) {
+    const def = POWERUP_DEFS[key];
+    // Shield is special: lasts until consumed by a hit (no time limit)
+    const expiresAt = key === 'shield' ? Infinity : performance.now() + def.duration * 1000;
+    this.activePowerup = { key, expiresAt };
+    if (key === 'shield') this.shieldHP = 1;
+  }
+
+  damage(byShip) {
+    if (!this.alive) return false;
+    // Kill-reward invulnerability — bullets pass right through, no shield consumed
+    if (performance.now() < this.killShieldUntil) {
+      // small flicker on the kill-shield to show the deflection
+      spawnExplosion(this.x, this.y, '#ffd23f', 6);
+      return false;
+    }
+    if (this.shieldHP > 0) {
+      this.shieldHP -= 1;
+      this.flashAt = performance.now();
+      // shield popped: remove the active shield powerup
+      if (this.activePowerup && this.activePowerup.key === 'shield') this.activePowerup = null;
+      // small particle puff in cyan
+      spawnExplosion(this.x, this.y, '#00ffe0', 12);
+      return false; // damage absorbed
+    }
+    this.die(byShip);
+    return true;
+  }
+
+  die(byShip) {
+    this.alive = false;
+    this.respawnAt = performance.now() + 3000;
+    if (byShip) {
+      byShip.score += 1;
+      // Kill-reward shield. VAMPIRE makes it longer + resets fire cooldown.
+      const isVampire = byShip.activePowerup && byShip.activePowerup.key === 'vampire';
+      const shieldMs = isVampire ? 5000 : 3000;
+      byShip.killShieldUntil = performance.now() + shieldMs;
+      if (isVampire) byShip.fireCooldown = 0; // chain kills
+    }
+    spawnExplosion(this.x, this.y, this.color, 24);
+    const lostScore = this.score;
+    const lostLevel = level;
+    if (this.isPlayer) showDeath(lostScore, lostLevel);
+    if (king && king.id === this.id) king = null;
+    // Drop active powerup as a pickup at death location, if any
+    if (this.activePowerup && POWERUP_DEFS[this.activePowerup.key]) {
+      pickups.push(makePickup(this.x, this.y, this.activePowerup.key));
+    }
+    this.activePowerup = null;
+    this.shieldHP = 0;
+    // Roguelike: dying wipes your run. Score resets to 0 for everyone.
+    // Player death also resets the world level back to 1.
+    this.score = 0;
+    if (this.isPlayer && level > 1) {
+      level = 1;
+      applyWorldSizeForLevel(); // shrink world back to base
+      // Refresh every ship's words to the new (easier) pool
+      for (const s of [player, ...bots]) s.resetWords();
+    }
+  }
+
+  respawn() {
+    this.alive = true;
+    this.x = Math.random() * (WORLD.w - 400) + 200;
+    this.y = Math.random() * (WORLD.h - 400) + 200;
+    this.vx = (Math.random() - 0.5) * 60;
+    this.vy = (Math.random() - 0.5) * 60;
+    this.size = this.baseSize; // shrink back to small
+    // 3-second spawn invulnerability so you don't get instakilled appearing
+    this.killShieldUntil = performance.now() + 3000;
+    this.resetWords();
+    if (this.isPlayer) hideDeath();
+  }
+
+  thrust(dx, dy) {
+    const boosted = this.activePowerup && this.activePowerup.key === 'boost';
+    const speed = boosted ? 220 : 110;
+    this.vx += dx * speed;
+    this.vy += dy * speed;
+    const cap = boosted ? 420 : 280;
+    const m = Math.hypot(this.vx, this.vy);
+    if (m > cap) { this.vx = this.vx / m * cap; this.vy = this.vy / m * cap; }
+    this.lastDir = { x: dx, y: dy };
+    this.thrustAt = performance.now();
+  }
+
+  fire() {
+    if (this.fireCooldown > 0) return;
+    const isKing = this.isKing();
+    const apk = this.activePowerup ? this.activePowerup.key : null;
+    const isSpread = apk === 'spread';
+    const isBlast = apk === 'blast';
+    const isMulti = apk === 'multishot';
+    const isNuke = apk === 'nuke';
+    const baseColor = this.weaponColor();
+
+    if (isNuke) {
+      // Annihilate every living enemy. Long cooldown so it's not spam.
+      this.fireCooldown = 1.2;
+      for (const s of [player, ...bots]) {
+        if (!s.alive || s === this) continue;
+        s.damage(this);
+        // Also spawn a small explosion at each target for theatrics
+        spawnExplosion(s.x, s.y, baseColor, 18);
+      }
+      // A massive screen-filling shockwave from the firing ship
+      shockwaves.push({
+        x: this.x, y: this.y,
+        radius: 0, maxRadius: 9999,
+        life: 0.8, maxLife: 0.8,
+        color: baseColor,
+      });
+      if (this.isPlayer) flashScreen('#ffffff', 0.5);
+      return;
+    }
+
+    if (isBlast) {
+      // Short-range omnidirectional shockwave. Slightly longer cooldown.
+      this.fireCooldown = 0.45;
+      const radius = 120;
+      for (const s of [player, ...bots]) {
+        if (!s.alive || s === this) continue;
+        const dx = wrapDelta(this.x, s.x, WORLD.w);
+        const dy = wrapDelta(this.y, s.y, WORLD.h);
+        if (Math.hypot(dx, dy) <= radius + s.hitHalf()) {
+          s.damage(this);
+        }
+      }
+      shockwaves.push({
+        x: this.x, y: this.y,
+        radius: 0, maxRadius: radius,
+        life: 0.4, maxLife: 0.4,
+        color: baseColor,
+      });
+      return;
+    }
+
+    this.fireCooldown = 0.25;
+    const speed = 520;
+    const dirAngle = Math.atan2(this.lastDir.y, this.lastDir.x);
+
+    function makeBullet(angle, owner) {
+      return {
+        x: owner.x, y: owner.y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        owner,
+        life: 1.6,
+        color: baseColor,
+        isKing,
+        hits: new Set(),
+      };
+    }
+
+    if (isMulti) {
+      // Fire from all 4 cardinal directions at once
+      bullets.push(makeBullet(0, this));
+      bullets.push(makeBullet(Math.PI / 2, this));
+      bullets.push(makeBullet(Math.PI, this));
+      bullets.push(makeBullet(-Math.PI / 2, this));
+    } else if (isSpread) {
+      bullets.push(makeBullet(dirAngle - 0.25, this));
+      bullets.push(makeBullet(dirAngle, this));
+      bullets.push(makeBullet(dirAngle + 0.25, this));
+    } else {
+      bullets.push(makeBullet(dirAngle, this));
+    }
+  }
+
+  update(dt) {
+    // Update size based on current score (roguelike: bigger target as you climb)
+    this.size = sizeForScore(this.score, this.baseSize, this.maxSize);
+
+    if (!this.alive) {
+      if (performance.now() >= this.respawnAt) this.respawn();
+      return;
+    }
+    this.fireCooldown = Math.max(0, this.fireCooldown - dt);
+
+    // expire powerup
+    if (this.activePowerup && performance.now() >= this.activePowerup.expiresAt) {
+      // shield only expires on consumption OR time, whichever first
+      this.activePowerup = null;
+      this.shieldHP = 0;
+    }
+
+    // friction (less when boosted — feels punchier)
+    const boosted = this.activePowerup && this.activePowerup.key === 'boost';
+    const friction = boosted ? 0.998 : 0.992;
+    this.vx *= friction;
+    this.vy *= friction;
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+    if (this.x < 0) this.x += WORLD.w;
+    if (this.x > WORLD.w) this.x -= WORLD.w;
+    if (this.y < 0) this.y += WORLD.h;
+    if (this.y > WORLD.h) this.y -= WORLD.h;
+
+    // Pickup gating (wrap-aware). Free to take, but you must meet `requires` score.
+    for (let i = pickups.length - 1; i >= 0; i--) {
+      const p = pickups[i];
+      const dx = wrapDelta(this.x, p.x, WORLD.w);
+      const dy = wrapDelta(this.y, p.y, WORLD.h);
+      if (Math.abs(dx) < this.size/2 + 16 && Math.abs(dy) < this.size/2 + 16) {
+        const def = POWERUP_DEFS[p.key];
+        const need = def.requires;
+        if (this.score >= need) {
+          this.applyPowerup(p.key);
+          // Remember where it was collected so the next spawn can be far away
+          lastPickupLocation = { x: p.x, y: p.y };
+          pickups.splice(i, 1);
+          if (this.isPlayer) flashScreen(def.color, 0.2);
+        } else if (this.isPlayer) {
+          // floating "NEED N" text — score needed, not deducted
+          if (!p.rejectFlashAt || performance.now() - p.rejectFlashAt > 800) {
+            p.rejectFlashAt = performance.now();
+            p.rejectNeed = need - this.score;
+          }
+        }
+      }
+    }
+
+    // Bot AI — difficulty scales with level
+    if (!this.isPlayer) {
+      this.botCooldown -= dt;
+      if (this.botCooldown <= 0) {
+        // Difficulty curve scales smoothly with level number.
+        // Uses a soft curve so it keeps getting harder past level 6,
+        // approaching but never quite reaching its limit.
+        const lvl = level;
+        const t = 1 - Math.pow(0.85, Math.max(0, lvl - 1)); // 0 at L1, ~0.5 at L5, ~0.8 at L10, ~0.95 at L19
+        // Action timing — keeps shrinking with a 0.4s hard floor
+        const minInterval = Math.max(0.4, 3.5 - t * 3.0);  // 3.5s → ~0.4s
+        const intervalRange = Math.max(0.6, 2.5 - t * 1.9); // 2.5s → ~0.6s
+        const actionInterval = minInterval + Math.random() * intervalRange;
+        // Aim and fire chances climb toward asymptotes
+        const aimChance = 0.2 + t * 0.78;          // 0.2 → ~0.98
+        const fireChance = 0.20 + t * 0.30;        // 0.20 → ~0.50
+        // Leader-hunting bias: bots increasingly target the highest-scoring enemy
+        const leaderBias = Math.min(0.85, t * 0.95); // 0 → ~0.85
+        this.botCooldown = actionInterval;
+
+        if (Math.random() < fireChance) {
+          this.fire();
+          this.resetWords();
+        } else {
+          let target = null;
+          if (Math.random() < aimChance) target = pickHostileTarget(this, leaderBias);
+          let dx, dy;
+          if (target) {
+            const tdx = wrapDelta(this.x, target.x, WORLD.w);
+            const tdy = wrapDelta(this.y, target.y, WORLD.h);
+            const ang = Math.atan2(tdy, tdx);
+            const cardinals = [[1,0],[-1,0],[0,1],[0,-1]];
+            cardinals.sort((a,b) => {
+              const da = Math.acos(Math.max(-1, Math.min(1, a[0]*Math.cos(ang) + a[1]*Math.sin(ang))));
+              const db = Math.acos(Math.max(-1, Math.min(1, b[0]*Math.cos(ang) + b[1]*Math.sin(ang))));
+              return da - db;
+            });
+            [dx, dy] = cardinals[0];
+          } else {
+            [dx, dy] = randFrom([[1,0],[-1,0],[0,1],[0,-1]]);
+          }
+          this.thrust(dx, dy);
+          this.resetWords();
+        }
+      }
+    }
+  }
+}
+
+// ----- Pickups -----
+const PICKUP_LIFETIME_MS = 30000; // 30 seconds before despawn
+const PICKUP_FLASH_WINDOW_MS = 5000; // last 5 seconds: flash 5 times
+
+function makePickup(x, y, key) {
+  return {
+    x, y, key,
+    born: performance.now(),
+    expiresAt: performance.now() + PICKUP_LIFETIME_MS,
+    bob: Math.random() * Math.PI * 2,
+  };
+}
+
+const pickups = [];
+let lastPickupLocation = null; // {x, y} of the last collected pickup
+const MIN_SPAWN_DISTANCE = 1200; // wrap-aware min distance from last pickup
+
+function spawnRandomPickup() {
+  const allKeys = Object.keys(POWERUP_DEFS);
+  const key = randFrom(allKeys);
+  // Pick a location far from the previously collected pickup (if any)
+  let x, y;
+  let attempts = 0;
+  while (attempts++ < 30) {
+    x = Math.random() * WORLD.w;
+    y = Math.random() * WORLD.h;
+    if (!lastPickupLocation) break;
+    const dx = wrapDelta(lastPickupLocation.x, x, WORLD.w);
+    const dy = wrapDelta(lastPickupLocation.y, y, WORLD.h);
+    if (Math.hypot(dx, dy) >= MIN_SPAWN_DISTANCE) break;
+  }
+  pickups.push(makePickup(x, y, key));
+}
+let pickupTimer = 0;
+const PICKUP_RESPAWN_DELAY = 4; // seconds after one is collected before next appears
+const MAX_PICKUPS = 1;
+
+// ----- Game state -----
+let level = 1;
+let player;
+const bots = [];
+const bullets = [];
+const particles = [];
+const shockwaves = [];
+let king = null;
+let kingTimer = 0;
+let typedBuffer = '';
+let flash = null; // { color, until }
+
+function pickNearestEnemy(ship) {
+  let best = null, bd = Infinity;
+  for (const s of [player, ...bots]) {
+    if (s === ship || !s.alive) continue;
+    // PHANTOM: 70% chance bots don't see this ship as a valid target
+    const isPhantom = s.activePowerup && s.activePowerup.key === 'phantom';
+    if (isPhantom && Math.random() < 0.7) continue;
+    const dx = wrapDelta(ship.x, s.x, WORLD.w);
+    const dy = wrapDelta(ship.y, s.y, WORLD.h);
+    const d = Math.hypot(dx, dy);
+    if (d < bd) { bd = d; best = s; }
+  }
+  return best;
+}
+
+// Picks the highest-scoring living enemy (the leader). PHANTOM-aware.
+function pickLeaderEnemy(ship) {
+  let best = null;
+  for (const s of [player, ...bots]) {
+    if (s === ship || !s.alive) continue;
+    const isPhantom = s.activePowerup && s.activePowerup.key === 'phantom';
+    if (isPhantom && Math.random() < 0.7) continue;
+    if (!best || s.score > best.score) best = s;
+  }
+  return best;
+}
+
+// Combine leader-hunting and nearest-targeting based on a bias 0..1.
+// bias=0 → always nearest. bias=1 → always leader (if leader has score > 0).
+function pickHostileTarget(ship, leaderBias) {
+  // If nobody has any score yet, fall back to nearest (no point chasing the "leader")
+  let anyScore = false;
+  for (const s of [player, ...bots]) {
+    if (s !== ship && s.alive && s.score > 0) { anyScore = true; break; }
+  }
+  if (anyScore && Math.random() < leaderBias) {
+    const leader = pickLeaderEnemy(ship);
+    if (leader) return leader;
+  }
+  return pickNearestEnemy(ship);
+}
+
+function init() {
+  player = new Ship({
+    id: 'p', name: 'YOU', isPlayer: true,
+    x: WORLD.w/2, y: WORLD.h/2,
+    color: '#00ffe0',
+  });
+  const botColors = ['#ff2d6f','#a06bff','#1ec8ff','#7cff5a','#ff8c42'];
+  const botNames = ['BLACKBYTE','CUTLASS','KRAKEN','SCURVY','GIBBET'];
+  for (let i = 0; i < 5; i++) {
+    bots.push(new Ship({
+      id: 'b'+i, name: botNames[i],
+      x: Math.random() * WORLD.w,
+      y: Math.random() * WORLD.h,
+      color: botColors[i],
+    }));
+  }
+  showLevelIntro();
+}
+
+function spawnExplosion(x, y, color, count = 22) {
+  for (let i = 0; i < count; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const s = Math.random() * 220 + 60;
+    particles.push({
+      x, y,
+      vx: Math.cos(a) * s,
+      vy: Math.sin(a) * s,
+      life: 0.6 + Math.random() * 0.4,
+      maxLife: 1.0,
+      color,
+      r: 1.5 + Math.random() * 2,
+    });
+  }
+}
+
+function flashScreen(color, secs) {
+  flash = { color, until: performance.now() + secs * 1000 };
+}
+
+// ----- Input -----
+window.addEventListener('keydown', (e) => {
+  // Audio: kick off playback on first interaction (browsers block autoplay)
+  audioStartIfPending();
+
+  // Audio controls (use punctuation so they don't conflict with typing letters)
+  if (e.key === '\\' || e.key === '|') {
+    audioToggleMute();
+    return;
+  }
+  if (e.key === '=' || e.key === '+') {
+    audioNext();
+    return;
+  }
+  if (e.key === '-' || e.key === '_') {
+    audioPrev();
+    return;
+  }
+
+  // Cheat keys: number 1-9 warps to that level (without changing score),
+  // 0 resets the high score. Active even when dead.
+  if (e.key >= '0' && e.key <= '9' && e.key.length === 1) {
+    const n = parseInt(e.key, 10);
+    if (n === 0) {
+      cheatResetHighScore();
+    } else {
+      cheatWarpToLevel(n);
+    }
+    return;
+  }
+  if (!player.alive) return;
+  if (e.key.length === 1 && /[a-zA-Z]/.test(e.key)) {
+    typedBuffer += e.key.toLowerCase();
+    handlePlayerTyping();
+  } else if (e.key === 'Backspace') {
+    typedBuffer = typedBuffer.slice(0, -1);
+  } else if (e.key === 'Escape') {
+    typedBuffer = '';
+  }
+});
+
+function cheatWarpToLevel(targetLevel) {
+  if (!LEVEL_CONFIG.length) return;
+  const clamped = Math.max(1, Math.min(LEVEL_CONFIG.length, targetLevel));
+  level = clamped;
+  applyWorldSizeForLevel();
+  for (const s of [player, ...bots]) s.resetWords();
+  showLevelIntro();
+}
+
+function cheatResetHighScore() {
+  highScore = 0;
+  highscoreValueEl.textContent = fmtScore(0);
+  saveHighScore();
+}
+
+function handlePlayerTyping() {
+  const w = player.words;
+  const candidates = [
+    { word: w.up, action: () => player.thrust(0, -1) },
+    { word: w.down, action: () => player.thrust(0, 1) },
+    { word: w.left, action: () => player.thrust(-1, 0) },
+    { word: w.right, action: () => player.thrust(1, 0) },
+    { word: w.fire, action: () => player.fire() },
+  ];
+  for (const c of candidates) {
+    if (typedBuffer === c.word) {
+      c.action();
+      refreshWordSlot(player, c.word);
+      typedBuffer = '';
+      return;
+    }
+  }
+  const isPrefix = candidates.some(c => c.word.startsWith(typedBuffer));
+  if (!isPrefix) typedBuffer = '';
+}
+
+function refreshWordSlot(ship, oldWord) {
+  const slots = ['up','down','left','right','fire'];
+  const slot = slots.find(s => ship.words[s] === oldWord);
+  if (!slot) return;
+  const otherFirsts = new Set(slots.filter(s => s !== slot).map(s => ship.words[s][0]));
+  const cfg = LEVEL_CONFIG[level - 1];
+  const cand = pickWordOfLength(cfg.wordLength, otherFirsts);
+  if (cand) ship.words[slot] = cand;
+}
+
+// ----- Loop -----
+let lastT = performance.now();
+let paused = false;
+function loop() {
+  const now = performance.now();
+  const dt = paused ? 0 : Math.min(0.05, (now - lastT) / 1000);
+  lastT = now;
+
+  if (!paused) {
+    player.update(dt);
+    for (const b of bots) b.update(dt);
+
+    // bullets
+    for (let i = bullets.length - 1; i >= 0; i--) {
+      const b = bullets[i];
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+      b.life -= dt;
+      if (b.life <= 0) { bullets.splice(i, 1); continue; }
+      if (b.x < 0) b.x += WORLD.w;
+      if (b.x > WORLD.w) b.x -= WORLD.w;
+      if (b.y < 0) b.y += WORLD.h;
+      if (b.y > WORLD.h) b.y -= WORLD.h;
+
+      // wrap-aware collision
+      let removed = false;
+      for (const s of [player, ...bots]) {
+        if (!s.alive || s === b.owner) continue;
+        if (b.hits && b.hits.has(s.id)) continue;
+        const dx = wrapDelta(b.x, s.x, WORLD.w);
+        const dy = wrapDelta(b.y, s.y, WORLD.h);
+        const hh = s.hitHalf();
+        if (Math.abs(dx) < hh && Math.abs(dy) < hh) {
+          s.damage(b.owner);
+          bullets.splice(i, 1);
+          removed = true;
+          break;
+        }
+      }
+      if (removed) continue;
+    }
+
+    // shockwaves (visual expansion only — damage already applied at fire time)
+    for (let i = shockwaves.length - 1; i >= 0; i--) {
+      const sw = shockwaves[i];
+      sw.life -= dt;
+      sw.radius = (1 - sw.life / sw.maxLife) * sw.maxRadius;
+      if (sw.life <= 0) shockwaves.splice(i, 1);
+    }
+
+    // particles
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vx *= 0.96; p.vy *= 0.96;
+      p.life -= dt;
+      if (p.life <= 0) particles.splice(i, 1);
+    }
+
+    // Pickup expiration: 30s lifetime, flashes in last 5s
+    for (let i = pickups.length - 1; i >= 0; i--) {
+      if (performance.now() >= pickups[i].expiresAt) {
+        pickups.splice(i, 1);
+      }
+    }
+
+    // Pickup spawning: 1 on the map at a time, persists until bought or expired.
+    if (pickups.length === 0) {
+      pickupTimer += dt;
+      if (pickupTimer >= PICKUP_RESPAWN_DELAY) {
+        pickupTimer = 0;
+        spawnRandomPickup();
+      }
+    } else {
+      pickupTimer = 0;
+    }
+
+    // KOTH
+    updateKing(dt);
+    if (king) {
+      kingTimer += dt;
+      if (kingTimer >= 1) { kingTimer = 0; king.score = Math.round((king.score + 0.1) * 10) / 10; }
+    }
+
+    // High score check (covers kills, KOTH ticks, and any other score change)
+    maybeUpdateHighScore();
+
+    // Level progression
+    const cfg = LEVEL_CONFIG[level - 1];
+    if (player.score >= cfg.scoreToAdvance && level < LEVEL_CONFIG.length) {
+      level++;
+      onLevelUp();
+    }
+  }
+
+  draw();
+  updateHUD();
+  requestAnimationFrame(loop);
+}
+
+function updateKing(dt) {
+  let best = null;
+  for (const s of [player, ...bots]) {
+    if (!s.alive) continue;
+    if (!best || s.score > best.score) best = s;
+  }
+  if (best && best.score > 0) king = best;
+  else king = null;
+}
+
+function applyWorldSizeForLevel() {
+  const scale = 1 + WORLD_GROWTH_PER_LEVEL * (level - 1);
+  WORLD.w = Math.round(BASE_WORLD.w * scale);
+  WORLD.h = Math.round(BASE_WORLD.h * scale);
+  // Ensure all entities are inside the new bounds (matters when shrinking)
+  for (const s of [player, ...bots]) {
+    if (!s) continue;
+    s.x = ((s.x % WORLD.w) + WORLD.w) % WORLD.w;
+    s.y = ((s.y % WORLD.h) + WORLD.h) % WORLD.h;
+  }
+  for (const p of pickups) {
+    p.x = ((p.x % WORLD.w) + WORLD.w) % WORLD.w;
+    p.y = ((p.y % WORLD.h) + WORLD.h) % WORLD.h;
+  }
+  // Maintain star density proportional to area
+  const targetStars = Math.round(220 * scale * scale);
+  while (stars.length < targetStars) {
+    stars.push({
+      x: Math.random() * WORLD.w,
+      y: Math.random() * WORLD.h,
+      r: Math.random() * 1.6 + 0.2,
+      layer: Math.random() < 0.5 ? 0.4 : (Math.random() < 0.7 ? 0.7 : 1.0),
+      twinkle: Math.random() * Math.PI * 2,
+    });
+  }
+  // (Don't trim stars on shrink — extra stars don't hurt)
+}
+
+function onLevelUp() {
+  for (const s of [player, ...bots]) s.resetWords();
+  applyWorldSizeForLevel();
+  showLevelIntro();
+}
+
+// ----- Drawing -----
+function draw() {
+  const cam = { x: player.x - W/2, y: player.y - H/2 };
+
+  // bg gradient
+  const grad = ctx.createRadialGradient(W/2, H/2, 80, W/2, H/2, Math.max(W,H));
+  grad.addColorStop(0, '#0a0d18');
+  grad.addColorStop(1, '#03040a');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  drawGrid(cam);
+
+  for (const s of stars) {
+    let sx = s.x - cam.x * s.layer;
+    let sy = s.y - cam.y * s.layer;
+    sx = ((sx % WORLD.w) + WORLD.w) % WORLD.w;
+    sy = ((sy % WORLD.h) + WORLD.h) % WORLD.h;
+    if (sx > W || sy > H) continue;
+    s.twinkle += 0.02;
+    const alpha = 0.3 + Math.sin(s.twinkle) * 0.2 + s.layer * 0.4;
+    ctx.fillStyle = `rgba(${200 + s.layer*55|0}, ${220 + s.layer*35|0}, 255, ${alpha})`;
+    ctx.fillRect(sx, sy, s.r, s.r);
+  }
+
+  // pickups (drawn under bullets)
+  for (const p of pickups) {
+    const def = POWERUP_DEFS[p.key];
+    const sxw = wrapDelta(cam.x + W/2, p.x, WORLD.w);
+    const syw = wrapDelta(cam.y + H/2, p.y, WORLD.h);
+    const sx = W/2 + sxw;
+    const sy = H/2 + syw;
+    if (sx < -40 || sx > W+40 || sy < -40 || sy > H+40) continue;
+    p.bob += 0.04;
+    const bob = Math.sin(p.bob) * 3;
+
+    // Expiration blink — last 5 seconds, 5 visible flashes
+    const remaining = p.expiresAt - performance.now();
+    let blinkAlpha = 1;
+    if (remaining < PICKUP_FLASH_WINDOW_MS) {
+      // 5 flashes over 5000ms => 1000ms period. Use a square-ish wave.
+      const phase = (PICKUP_FLASH_WINDOW_MS - remaining) % 1000;
+      // ON for ~600ms, OFF for ~400ms
+      blinkAlpha = phase < 600 ? 1 : 0.15;
+    }
+    ctx.globalAlpha = blinkAlpha;
+
+    // pulse glow
+    const pulse = 0.6 + Math.sin(performance.now()/250 + p.bob) * 0.3;
+    ctx.fillStyle = def.color + '33';
+    ctx.beginPath();
+    ctx.arc(sx, sy + bob, 22 * pulse, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = def.color;
+    ctx.shadowColor = def.color;
+    ctx.shadowBlur = 14;
+    ctx.beginPath();
+    ctx.arc(sx, sy + bob, 8, 0, Math.PI*2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    // letter inside
+    ctx.fillStyle = '#0a0d18';
+    ctx.font = 'bold 12px VT323, monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(def.name[0], sx, sy + bob + 1);
+
+    // Price tag below the orb
+    ctx.font = '14px VT323, monospace';
+    ctx.fillStyle = def.color;
+    ctx.shadowColor = def.color;
+    ctx.shadowBlur = 6;
+    ctx.fillText(`${def.name} · NEEDS ${fmtScore(def.requires)}`, sx, sy + bob + 24);
+    ctx.shadowBlur = 0;
+
+    // "NEED N" rejection text — fades out
+    if (p.rejectFlashAt) {
+      const elapsed = performance.now() - p.rejectFlashAt;
+      if (elapsed < 800) {
+        const a = 1 - elapsed / 800;
+        ctx.globalAlpha = a;
+        ctx.fillStyle = '#ff2d6f';
+        ctx.shadowColor = '#ff2d6f';
+        ctx.shadowBlur = 8;
+        ctx.font = 'bold 16px VT323, monospace';
+        ctx.fillText(`NEED ${fmtScore(p.rejectNeed)} MORE`, sx, sy + bob - 28 - (1 - a) * 14);
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
+      }
+    }
+    ctx.globalAlpha = 1; // reset alpha after blink
+  }
+
+  // shockwaves (expanding rings)
+  for (const sw of shockwaves) {
+    const sxw = wrapDelta(cam.x + W/2, sw.x, WORLD.w);
+    const syw = wrapDelta(cam.y + H/2, sw.y, WORLD.h);
+    const sx = W/2 + sxw;
+    const sy = H/2 + syw;
+    if (sx < -200 || sx > W+200 || sy < -200 || sy > H+200) continue;
+    const alpha = sw.life / sw.maxLife;
+    ctx.strokeStyle = sw.color;
+    ctx.shadowColor = sw.color;
+    ctx.shadowBlur = 18;
+    ctx.lineWidth = 4;
+    ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    ctx.arc(sx, sy, sw.radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.lineWidth = 2;
+    ctx.globalAlpha = alpha * 0.6;
+    ctx.beginPath();
+    ctx.arc(sx, sy, sw.radius * 0.7, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+  }
+
+  // bullets
+  for (const b of bullets) {
+    const sxw = wrapDelta(cam.x + W/2, b.x, WORLD.w);
+    const syw = wrapDelta(cam.y + H/2, b.y, WORLD.h);
+    const sx = W/2 + sxw;
+    const sy = H/2 + syw;
+    if (sx < -20 || sx > W+20 || sy < -20 || sy > H+20) continue;
+    if (b.isKing) {
+      ctx.fillStyle = 'rgba(255,210,63,0.3)';
+      ctx.beginPath();
+      ctx.arc(sx, sy, 9, 0, Math.PI*2);
+      ctx.fill();
+      ctx.fillStyle = '#ffd23f';
+      ctx.beginPath();
+      ctx.arc(sx, sy, 4.5, 0, Math.PI*2);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = b.color;
+      ctx.shadowColor = b.color;
+      ctx.shadowBlur = 8;
+      ctx.fillRect(sx-2.5, sy-2.5, 5, 5);
+      ctx.shadowBlur = 0;
+    }
+  }
+
+  // particles
+  for (const p of particles) {
+    const sxw = wrapDelta(cam.x + W/2, p.x, WORLD.w);
+    const syw = wrapDelta(cam.y + H/2, p.y, WORLD.h);
+    const sx = W/2 + sxw;
+    const sy = H/2 + syw;
+    const a = Math.max(0, p.life / p.maxLife);
+    ctx.globalAlpha = a;
+    ctx.fillStyle = p.color;
+    ctx.fillRect(sx-p.r/2, sy-p.r/2, p.r, p.r);
+    ctx.globalAlpha = 1;
+  }
+
+  // ships
+  for (const s of [...bots, player]) {
+    if (!s.alive) continue;
+    drawShip(s, cam);
+  }
+
+  // flash overlay
+  if (flash && performance.now() < flash.until) {
+    const t = (flash.until - performance.now()) / 150;
+    ctx.fillStyle = flash.color;
+    ctx.globalAlpha = Math.max(0, Math.min(1, t)) * 0.4;
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 1;
+  }
+
+  drawMinimap();
+}
+
+function drawGrid(cam) {
+  const step = 200;
+  ctx.strokeStyle = 'rgba(0,255,224,0.04)';
+  ctx.lineWidth = 1;
+  const startX = -((cam.x % step) + step) % step;
+  const startY = -((cam.y % step) + step) % step;
+  ctx.beginPath();
+  for (let x = startX; x < W; x += step) {
+    ctx.moveTo(x, 0); ctx.lineTo(x, H);
+  }
+  for (let y = startY; y < H; y += step) {
+    ctx.moveTo(0, y); ctx.lineTo(W, y);
+  }
+  ctx.stroke();
+}
+
+function drawShip(s, cam) {
+  // wrap-aware screen position
+  const dxw = wrapDelta(cam.x + W/2, s.x, WORLD.w);
+  const dyw = wrapDelta(cam.y + H/2, s.y, WORLD.h);
+  const sx = W/2 + dxw;
+  const sy = H/2 + dyw;
+  if (sx < -100 || sx > W+100 || sy < -100 || sy > H+100) return;
+
+  const size = s.size;
+  const half = size / 2;
+  const isKingShip = (king && king.id === s.id);
+  const flashed = (performance.now() - s.flashAt) < 120;
+  const thrust = (performance.now() - s.thrustAt) < 200;
+
+  // King aura
+  if (isKingShip) {
+    const pulse = 1 + Math.sin(performance.now()/200) * 0.1;
+    ctx.fillStyle = 'rgba(255,210,63,0.15)';
+    ctx.beginPath();
+    ctx.arc(sx, sy, size * pulse, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  // (Thrust glow trail removed — used to flash on the side opposite the thrust
+  // direction, which read as confusing: pressing top made the bottom glow.)
+
+  // PHANTOM: render the whole ship semi-transparent
+  const isPhantomShip = s.activePowerup && s.activePowerup.key === 'phantom';
+  if (isPhantomShip) ctx.globalAlpha = 0.4;
+
+  // Ship body
+  const bodyColor = flashed ? '#ffffff' : 'rgba(10,13,24,0.85)';
+  ctx.fillStyle = bodyColor;
+  ctx.fillRect(sx - half, sy - half, size, size);
+
+  // Neon border. King's border BLINKS dramatically — pulsing brightness + glow.
+  if (isKingShip) {
+    const t = performance.now() / 400;
+    const blink = 0.55 + Math.sin(t) * 0.45; // 0.10 → 1.00 alpha
+    const glow = 14 + Math.sin(t) * 12;     // 2 → 26 blur
+    ctx.shadowColor = '#ffd23f';
+    ctx.shadowBlur = glow;
+    ctx.strokeStyle = `rgba(255, 210, 63, ${blink})`;
+    ctx.lineWidth = 3;
+    ctx.strokeRect(sx - half, sy - half, size, size);
+    // Inner companion stroke for that "second skin" gold thickness
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = `rgba(255, 244, 194, ${blink * 0.7})`;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(sx - half + 3, sy - half + 3, size - 6, size - 6);
+  } else {
+    ctx.shadowColor = s.color;
+    ctx.shadowBlur = 10;
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(sx - half, sy - half, size, size);
+    ctx.shadowBlur = 0;
+  }
+
+  if (isPhantomShip) ctx.globalAlpha = 1;
+
+  // ----- Glowing fire-ready edge (dramatic — layered halo + crisp line) -----
+  if (s.fireCooldown <= 0.01) {
+    const wcol = s.weaponColor();
+    const ep = 0.6 + Math.sin(performance.now()/130) * 0.4; // 0.2 → 1.0
+    // Helper to draw the edge segment for the current lastDir
+    const drawEdge = () => {
+      ctx.beginPath();
+      if (s.lastDir.x === 1) {
+        ctx.moveTo(sx + half, sy - half);
+        ctx.lineTo(sx + half, sy + half);
+      } else if (s.lastDir.x === -1) {
+        ctx.moveTo(sx - half, sy - half);
+        ctx.lineTo(sx - half, sy + half);
+      } else if (s.lastDir.y === -1) {
+        ctx.moveTo(sx - half, sy - half);
+        ctx.lineTo(sx + half, sy - half);
+      } else if (s.lastDir.y === 1) {
+        ctx.moveTo(sx - half, sy + half);
+        ctx.lineTo(sx + half, sy + half);
+      }
+      ctx.stroke();
+    };
+    // Outer wide halo — soft, very glowy
+    ctx.shadowColor = wcol;
+    ctx.shadowBlur = 32;
+    ctx.strokeStyle = wcol;
+    ctx.lineWidth = 8;
+    ctx.globalAlpha = ep * 0.55;
+    drawEdge();
+    // Mid stroke — solid color
+    ctx.lineWidth = 4;
+    ctx.globalAlpha = ep;
+    drawEdge();
+    // Inner crisp white-hot core for brightness
+    ctx.shadowBlur = 14;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = ep * 0.9;
+    drawEdge();
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+  }
+
+  // ----- Shield ring (from powerup purchase) -----
+  if (s.shieldHP > 0) {
+    ctx.strokeStyle = '#00ffe0';
+    ctx.shadowColor = '#00ffe0';
+    ctx.shadowBlur = 12;
+    ctx.lineWidth = 2;
+    ctx.globalAlpha = 0.7 + Math.sin(performance.now()/200) * 0.3;
+    ctx.beginPath();
+    ctx.arc(sx, sy, half + 10, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+  }
+
+  // ----- Kill-reward invulnerability shield (bright white, fades out near end) -----
+  if (performance.now() < s.killShieldUntil) {
+    const remainingMs = s.killShieldUntil - performance.now();
+    const totalMs = 3000;
+    const t = remainingMs / totalMs; // 1.0 -> 0.0
+    const fade = t < 0.3 ? t / 0.3 : 1; // fade alpha in last 30% (~900ms)
+
+    // Pulsing radius
+    const pulse = Math.sin(performance.now() / 120) * 3;
+    const r = half + 16 + pulse;
+
+    // Outer soft glow halo
+    const halo = ctx.createRadialGradient(sx, sy, half, sx, sy, r + 18);
+    halo.addColorStop(0, `rgba(255,255,255,${0.0 * fade})`);
+    halo.addColorStop(0.5, `rgba(255,255,255,${0.18 * fade})`);
+    halo.addColorStop(1, `rgba(255,255,255,0)`);
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(sx, sy, r + 18, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Bright crisp ring
+    ctx.strokeStyle = '#ffffff';
+    ctx.shadowColor = '#ffffff';
+    ctx.shadowBlur = 22;
+    ctx.lineWidth = 2.5;
+    ctx.globalAlpha = (0.85 + Math.sin(performance.now() / 100) * 0.15) * fade;
+    ctx.beginPath();
+    ctx.arc(sx, sy, r, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Inner thinner ring for depth
+    ctx.strokeStyle = 'rgba(220,255,255,0.7)';
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.6 * fade;
+    ctx.beginPath();
+    ctx.arc(sx, sy, r - 4, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+  }
+
+  // (BOOST powerup trail removed — same reason as the thrust glow.
+  // BOOST is still indicated via the HUD bar and the green firing-edge color.)
+
+  // ----- Vampire aura (red pulsing glow) -----
+  if (s.activePowerup && s.activePowerup.key === 'vampire') {
+    const pulseV = 0.3 + Math.sin(performance.now() / 220) * 0.12;
+    ctx.fillStyle = `rgba(255, 48, 80, ${pulseV})`;
+    ctx.beginPath();
+    ctx.arc(sx, sy, half + 14, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // ----- Nuke aura (white-hot, intense, just a tease — fire to detonate) -----
+  if (s.activePowerup && s.activePowerup.key === 'nuke') {
+    const pulseN = 0.5 + Math.sin(performance.now() / 80) * 0.4;
+    ctx.shadowColor = '#fff4c2';
+    ctx.shadowBlur = 25;
+    ctx.strokeStyle = `rgba(255, 244, 194, ${pulseN})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(sx, sy, half + 12, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  // ----- Multishot indicator (4 small dots at corners) -----
+  if (s.activePowerup && s.activePowerup.key === 'multishot') {
+    ctx.fillStyle = '#3aa0ff';
+    ctx.shadowColor = '#3aa0ff';
+    ctx.shadowBlur = 8;
+    const pulseM = 2 + Math.sin(performance.now() / 200) * 1;
+    ctx.beginPath(); ctx.arc(sx + half + 6, sy, pulseM, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(sx - half - 6, sy, pulseM, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(sx, sy + half + 6, pulseM, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(sx, sy - half - 6, pulseM, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  // Words on edges (font scales gently with ship size)
+  const edgeFontSize = Math.max(14, Math.round(size * 0.30));
+  ctx.font = `${edgeFontSize}px VT323, monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  const w = s.words;
+  const edgeColor = s.isPlayer ? '#e6f1ff' : 'rgba(230,241,255,0.7)';
+  const fireColor = s.weaponColor();
+
+  function drawEdgeWord(word, x, y, isFire=false) {
+    if (s.isPlayer && typedBuffer && word.startsWith(typedBuffer)) {
+      const typed = typedBuffer;
+      const rest = word.slice(typed.length);
+      const fullW = ctx.measureText(word).width;
+      const typedW = ctx.measureText(typed).width;
+      const startX = x - fullW/2;
+      ctx.fillStyle = '#00ffe0';
+      ctx.shadowColor = '#00ffe0';
+      ctx.shadowBlur = 6;
+      ctx.textAlign = 'left';
+      ctx.fillText(typed, startX, y);
+      ctx.fillStyle = isFire ? fireColor : edgeColor;
+      ctx.shadowBlur = 0;
+      ctx.fillText(rest, startX + typedW, y);
+      ctx.textAlign = 'center';
+    } else {
+      ctx.fillStyle = isFire ? fireColor : edgeColor;
+      ctx.fillText(word, x, y);
+    }
+  }
+
+  // Directional words OUTSIDE the square
+  drawEdgeWord(w.up, sx, sy - half - 10);
+  drawEdgeWord(w.down, sx, sy + half + 10);
+  drawEdgeWord(w.left, sx - half - 22, sy);
+  drawEdgeWord(w.right, sx + half + 22, sy);
+
+  // Fire word inside the square. For the player it's truly centered (no name below).
+  // For bots, it sits slightly above to make room for the name+score line.
+  if (s.isPlayer) {
+    drawEdgeWord(w.fire, sx, sy, true);
+  } else {
+    drawEdgeWord(w.fire, sx, sy - 6, true);
+    // Bots show name + score INSIDE the square at the bottom
+    const nameFontSize = Math.max(10, Math.round(size * 0.18));
+    ctx.font = `${nameFontSize}px VT323, monospace`;
+    ctx.fillStyle = isKingShip ? '#ffd23f' : 'rgba(230,241,255,0.55)';
+    ctx.fillText(`${s.name} · ${fmtScore(s.score)}`, sx, sy + half - nameFontSize * 0.8);
+  }
+
+  if (isKingShip) {
+    ctx.font = '22px serif';
+    ctx.fillText('👑', sx, sy - half - 28);
+  }
+}
+
+function drawMinimap() {
+  const mw = 200, mh = 150;
+  const x = W - mw - 18;
+  const y = H - mh - 18;
+  ctx.fillStyle = 'rgba(5,6,10,0.75)';
+  ctx.fillRect(x, y, mw, mh);
+  ctx.strokeStyle = 'rgba(0,255,224,0.4)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x+0.5, y+0.5, mw-1, mh-1);
+  ctx.fillStyle = 'rgba(107,122,153,0.9)';
+  ctx.font = '12px VT323, monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText('// minimap', x+6, y+14);
+
+  const sx = mw / WORLD.w;
+  const sy = mh / WORLD.h;
+
+  // pickups — drawn as small diamonds (rotated squares) with a pulsing ring
+  // and a white center pip so they're clearly distinguishable from ship dots
+  const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 280);
+  for (const p of pickups) {
+    const def = POWERUP_DEFS[p.key];
+    const dx = x + p.x * sx;
+    const dy = y + p.y * sy;
+    // pulsing outer ring
+    ctx.strokeStyle = def.color;
+    ctx.globalAlpha = 0.35 + 0.45 * pulse;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(dx, dy, 4 + pulse * 1.5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    // diamond shape
+    ctx.fillStyle = def.color;
+    ctx.beginPath();
+    ctx.moveTo(dx, dy - 3);
+    ctx.lineTo(dx + 3, dy);
+    ctx.lineTo(dx, dy + 3);
+    ctx.lineTo(dx - 3, dy);
+    ctx.closePath();
+    ctx.fill();
+    // white center pip — high contrast against any color
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(dx - 0.5, dy - 0.5, 1, 1);
+  }
+
+  // ships
+  for (const s of [...bots, player]) {
+    if (!s.alive) continue;
+    const dx = x + s.x * sx;
+    const dy = y + s.y * sy;
+    const isKingShip = (king && king.id === s.id);
+    ctx.fillStyle = isKingShip ? '#ffd23f' : s.color;
+    const r = s.isPlayer ? 3 : (isKingShip ? 3 : 2);
+    ctx.beginPath();
+    ctx.arc(dx, dy, r, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  // viewport rectangle (handles wrap by drawing up to 4 copies)
+  const vw = W * sx;
+  const vh = H * sy;
+  const baseVX = (player.x - W/2);
+  const baseVY = (player.y - H/2);
+  ctx.strokeStyle = 'rgba(0,255,224,0.7)';
+  ctx.lineWidth = 1;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, mw, mh);
+  ctx.clip();
+  for (let ox = -1; ox <= 1; ox++) {
+    for (let oy = -1; oy <= 1; oy++) {
+      const vx = x + (baseVX + ox * WORLD.w) * sx;
+      const vy = y + (baseVY + oy * WORLD.h) * sy;
+      ctx.strokeRect(vx, vy, vw, vh);
+    }
+  }
+  ctx.restore();
+}
+
+// ----- HUD -----
+const levelText = document.getElementById('levelText');
+const leaderboardEl = document.getElementById('leaderboard');
+const powerupBox = document.getElementById('powerupBox');
+const powerupLabel = document.getElementById('powerupLabel');
+const powerupFill = document.getElementById('powerupFill');
+
+function updateHUD() {
+  levelText.textContent = LEVEL_CONFIG[level - 1].label;
+
+  // powerup box
+  if (player.activePowerup) {
+    const def = POWERUP_DEFS[player.activePowerup.key];
+    const isShield = player.activePowerup.key === 'shield';
+    powerupBox.classList.add('show');
+    if (isShield) {
+      // Shield is persistent until consumed
+      powerupLabel.innerHTML = `<span style="color:${def.color}; text-shadow: 0 0 6px ${def.color}">▸ ${def.name}</span> · ready`;
+      powerupFill.style.width = '100%';
+    } else {
+      const remain = (player.activePowerup.expiresAt - performance.now()) / 1000;
+      const total = def.duration;
+      powerupLabel.innerHTML = `<span style="color:${def.color}; text-shadow: 0 0 6px ${def.color}">▸ ${def.name}</span> · ${remain.toFixed(1)}s`;
+      powerupFill.style.width = Math.max(0, Math.min(100, (remain/total)*100)) + '%';
+    }
+    powerupFill.style.background = def.color;
+    powerupFill.style.boxShadow = `0 0 8px ${def.color}`;
+  } else {
+    powerupBox.classList.remove('show');
+  }
+
+  const ships = [player, ...bots].slice().sort((a,b) => b.score - a.score);
+  let html = '<h3>// leaderboard</h3>';
+  for (const s of ships) {
+    const cls = [];
+    if (king && king.id === s.id) cls.push('king');
+    if (s.isPlayer) cls.push('you');
+    if (!s.alive) cls.push('dead');
+    const crown = (king && king.id === s.id) ? '👑 ' : '';
+    // king/you classes win via CSS color; bots get their ship color inline
+    const isKingOrYou = cls.includes('king') || cls.includes('you');
+    const styleAttr = isKingOrYou ? '' : ` style="color:${s.color}; text-shadow: 0 0 6px ${s.color}80"`;
+    html += `<div class="row ${cls.join(' ')}"${styleAttr}>${crown}${s.name} · ${fmtScore(s.score)}</div>`;
+  }
+  leaderboardEl.innerHTML = html;
+}
+
+// ----- Banner -----
+const banner = document.getElementById('banner');
+const bannerBig = document.getElementById('bannerBig');
+const bannerSmall = document.getElementById('bannerSmall');
+function showBanner(big, small) {
+  bannerBig.textContent = big;
+  bannerSmall.textContent = small;
+  banner.classList.add('show');
+  setTimeout(() => banner.classList.remove('show'), 2200);
+}
+
+// ----- Level intro toast (non-blocking, bottom of screen, auto-dismiss) -----
+const intro = document.getElementById('intro');
+const introLevelTag = document.getElementById('introLevelTag');
+const introTitle = document.getElementById('introTitle');
+const introPwDesc = document.getElementById('introPwDesc');
+let introHideTimer = null;
+
+function showLevelIntro() {
+  const cfg = LEVEL_CONFIG[level - 1];
+  introLevelTag.textContent = `LEVEL ${cfg.n}`;
+  const t = cfg.label.split('—')[1] || cfg.label;
+  introTitle.textContent = t.trim();
+  introPwDesc.textContent = cfg.sub;
+  intro.classList.add('show');
+  // Auto-dismiss after a few seconds
+  if (introHideTimer) clearTimeout(introHideTimer);
+  introHideTimer = setTimeout(() => intro.classList.remove('show'), 3500);
+  // Grant 3-second spawn invulnerability to all living ships.
+  // This is the kill-shield (time-based invuln) — it doesn't touch the SHIELD
+  // powerup's shieldHP (which absorbs one hit and persists until consumed),
+  // so a player holding the SHIELD powerup keeps it AND gets the temporary
+  // invuln on top. Don't shorten an existing longer kill-shield.
+  const now = performance.now();
+  const grantUntil = now + 3000;
+  for (const s of [player, ...bots]) {
+    if (!s || !s.alive) continue;
+    if (grantUntil > s.killShieldUntil) {
+      s.killShieldUntil = grantUntil;
+    }
+  }
+}
+
+// Kept as a no-op alias for back-compat in case anything else calls it
+function hideLevelIntro() {
+  intro.classList.remove('show');
+  if (introHideTimer) { clearTimeout(introHideTimer); introHideTimer = null; }
+}
+
+// ----- Death overlay -----
+const death = document.getElementById('death');
+const respawnText = document.getElementById('respawnText');
+const runStatsEl = document.getElementById('runStats');
+let respawnInterval = null;
+function showDeath(lostScore = 0, lostLevel = 1) {
+  death.classList.add('show');
+  // Show how much was lost — bigger numbers feel more punishing
+  const reachedHigh = lostScore > 0 && lostScore >= highScore;
+  if (reachedHigh) {
+    runStatsEl.innerHTML = `you reached <span class="lost">${fmtScore(lostScore)}</span> · level ${lostLevel} — new high score`;
+  } else {
+    runStatsEl.innerHTML = `<span class="lost">${fmtScore(lostScore)}</span> points lost · level ${lostLevel}`;
+  }
+  let t = 3;
+  respawnText.textContent = `new run in ${t}...`;
+  clearInterval(respawnInterval);
+  respawnInterval = setInterval(() => {
+    t--;
+    if (t <= 0) { clearInterval(respawnInterval); return; }
+    respawnText.textContent = `new run in ${t}...`;
+  }, 1000);
+}
+function hideDeath() {
+  death.classList.remove('show');
+  clearInterval(respawnInterval);
+}
+
+// ----- High Score (persisted) -----
+const HIGHSCORE_KEY = 'wordsteroids:highscore';
+let highScore = 0;
+const highscoreEl = document.getElementById('highscore');
+const highscoreValueEl = document.getElementById('highscoreValue');
+
+async function loadHighScore() {
+  try {
+    if (typeof window.storage === 'undefined') return;
+    const result = await window.storage.get(HIGHSCORE_KEY);
+    if (result && result.value) {
+      const parsed = parseFloat(result.value);
+      if (!isNaN(parsed)) {
+        highScore = parsed;
+        highscoreValueEl.textContent = fmtScore(highScore);
+      }
+    }
+  } catch (e) {
+    // Key doesn't exist yet, or storage unavailable — start at 0
+  }
+}
+
+async function saveHighScore() {
+  try {
+    if (typeof window.storage === 'undefined') return;
+    await window.storage.set(HIGHSCORE_KEY, String(highScore));
+  } catch (e) {
+    // Storage unavailable — score is in-memory only this session
+  }
+}
+
+function maybeUpdateHighScore() {
+  if (player.score > highScore) {
+    highScore = player.score;
+    highscoreValueEl.textContent = fmtScore(highScore);
+    // Trigger celebration pulse
+    highscoreEl.classList.remove('beat');
+    void highscoreEl.offsetWidth; // restart animation
+    highscoreEl.classList.add('beat');
+    saveHighScore();
+  }
+}
+
+// ============================================================
+// AUDIO — background music playlist
+// ============================================================
+const TRACK_URLS = [
+  'https://cdn.jsdelivr.net/gh/mriely/WORDSTEROIDS@main/wordsteroids2.mp3',
+  'https://cdn.jsdelivr.net/gh/mriely/WORDSTEROIDS@main/wordsteroids3.mp3',
+];
+
+const audio = {
+  el: null,
+  order: [],   // shuffled indices into TRACK_URLS
+  pos: 0,      // index into order[]
+  muted: false,
+  started: false,
+  volume: 0.4, // default low so it doesn't blast on first play
+};
+
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function audioInit() {
+  if (audio.el) return;
+  audio.el = new Audio();
+  audio.el.volume = audio.volume;
+  audio.el.preload = 'auto';
+  audio.el.crossOrigin = 'anonymous';
+  audio.failedTracks = new Set();
+  audio.el.addEventListener('ended', audioNext);
+  audio.el.addEventListener('error', () => {
+    const failedSrc = audio.el.src;
+    console.warn('audio failed:', failedSrc);
+    audio.failedTracks.add(failedSrc);
+    // If every track has failed, give up instead of looping forever
+    if (audio.failedTracks.size >= TRACK_URLS.length) {
+      console.warn('all audio tracks failed to load — giving up. Try opening this file directly in a browser instead of the sandbox.');
+      return;
+    }
+    setTimeout(audioNext, 800);
+  });
+  audio.order = shuffle(TRACK_URLS.map((_, i) => i));
+  audio.pos = 0;
+}
+
+function audioPlayCurrent() {
+  if (!audio.el || TRACK_URLS.length === 0) return;
+  const idx = audio.order[audio.pos];
+  audio.el.src = TRACK_URLS[idx];
+  audio.el.play().catch(err => {
+    console.warn('audio play deferred (will retry on first keypress):', err.message);
+    audio.started = false;
+  });
+  showAudioToast(`♪ track ${audio.pos + 1}/${TRACK_URLS.length}`);
+}
+
+function audioNext() {
+  if (!audio.el || TRACK_URLS.length === 0) return;
+  audio.pos = (audio.pos + 1) % audio.order.length;
+  if (audio.pos === 0) audio.order = shuffle(TRACK_URLS.map((_, i) => i));
+  audioPlayCurrent();
+}
+
+function audioPrev() {
+  if (!audio.el || TRACK_URLS.length === 0) return;
+  audio.pos = (audio.pos - 1 + audio.order.length) % audio.order.length;
+  audioPlayCurrent();
+}
+
+function audioToggleMute() {
+  if (!audio.el) return;
+  audio.muted = !audio.muted;
+  audio.el.muted = audio.muted;
+  showAudioToast(audio.muted ? '♪ MUTED' : '♪ UNMUTED');
+}
+
+// Browsers allow muted autoplay. We start muted at boot, then on the first
+// user keypress (a "user gesture") we unmute. This way music begins playing
+// silently the moment the game loads and becomes audible the instant you start.
+function audioBootStart() {
+  if (!audio.el) audioInit();
+  if (audio.started) return;
+  audio.started = true;
+  audio.el.muted = true; // muted autoplay is allowed
+  audioPlayCurrent();
+}
+
+function audioStartIfPending() {
+  // Called on first user keypress.
+  if (!audio.el) audioInit();
+  if (!audio.started) {
+    // Edge case: boot autoplay didn't fire for some reason, start fresh
+    audio.started = true;
+    audio.el.muted = false;
+    audioPlayCurrent();
+    return;
+  }
+  // Boot already started a muted track; unmute it now (user gesture allows this).
+  if (audio.el.muted && !audio.muted) {
+    audio.el.muted = false;
+  }
+}
+
+// Small temporary toast at bottom-right (above minimap is fine, it's transient)
+let audioToastTimer = null;
+function showAudioToast(msg) {
+  let el = document.getElementById('audioToast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'audioToast';
+    el.style.cssText = `
+      position:absolute; bottom:200px; right:20px; z-index:10;
+      font-family: 'VT323', monospace; font-size:18px;
+      color: var(--neon-2); letter-spacing: 0.18em;
+      text-shadow: 0 0 8px rgba(0,255,224,0.5);
+      padding: 6px 14px; background: rgba(5,6,10,0.7);
+      border: 1px solid rgba(0,255,224,0.3);
+      pointer-events: none; opacity: 0; transition: opacity 0.3s;
+    `;
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.opacity = '1';
+  if (audioToastTimer) clearTimeout(audioToastTimer);
+  audioToastTimer = setTimeout(() => { el.style.opacity = '0'; }, 1600);
+}
+
+// ----- Boot -----
+async function boot() {
+  loadHighScore();
+  // Show loading overlay
+  const loadingEl = document.getElementById('loading');
+  if (loadingEl) loadingEl.classList.add('show');
+  const result = await loadDictionary();
+  buildLevelConfig();
+  if (loadingEl) {
+    if (result.fallback) {
+      loadingEl.querySelector('.loading-sub').textContent =
+        'offline mode — using curated word list';
+      await new Promise(r => setTimeout(r, 1200));
+    }
+    loadingEl.classList.remove('show');
+  }
+  init();
+  audioInit();
+  // Start music muted right at game load. First user keypress unmutes it.
+  // This way the toast shows track 1/N immediately instead of waiting for
+  // first interaction, and you hear music the moment you start playing.
+  audioBootStart();
+  loop();
+}
+boot();
+</script>
+
+</body>
+</html>
