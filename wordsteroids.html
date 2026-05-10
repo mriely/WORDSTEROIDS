@@ -1413,7 +1413,7 @@ function makePickup(x, y, key) {
   };
 }
 
-const pickups = [];
+let pickups = [];
 let lastPickupLocation = null; // {x, y} of the last collected pickup
 const MIN_SPAWN_DISTANCE = 1200; // wrap-aware min distance from last pickup
 
@@ -1440,10 +1440,10 @@ const MAX_PICKUPS = 1;
 // ----- Game state -----
 let level = 1;
 let player;
-const bots = [];
-const bullets = [];
+let bots = [];
+let bullets = [];
 const particles = [];
-const shockwaves = [];
+let shockwaves = [];
 let king = null;
 let kingTimer = 0;
 let typedBuffer = '';
@@ -1451,7 +1451,8 @@ let flash = null; // { color, until }
 
 function pickNearestEnemy(ship) {
   let best = null, bd = Infinity;
-  for (const s of [player, ...bots]) {
+  const all = remotePlayer ? [player, remotePlayer, ...bots] : [player, ...bots];
+  for (const s of all) {
     if (s === ship || !s.alive) continue;
     // PHANTOM: completely invisible to bot targeting
     if (s.activePowerup && s.activePowerup.key === 'phantom') continue;
@@ -1466,7 +1467,8 @@ function pickNearestEnemy(ship) {
 // Picks the highest-scoring living enemy (the leader). Skips PHANTOMs.
 function pickLeaderEnemy(ship) {
   let best = null;
-  for (const s of [player, ...bots]) {
+  const all = remotePlayer ? [player, remotePlayer, ...bots] : [player, ...bots];
+  for (const s of all) {
     if (s === ship || !s.alive) continue;
     if (s.activePowerup && s.activePowerup.key === 'phantom') continue;
     if (!best || s.score > best.score) best = s;
@@ -1477,9 +1479,9 @@ function pickLeaderEnemy(ship) {
 // Combine leader-hunting and nearest-targeting based on a bias 0..1.
 // bias=0 → always nearest. bias=1 → always leader (if leader has score > 0).
 function pickHostileTarget(ship, leaderBias) {
-  // If nobody has any score yet, fall back to nearest (no point chasing the "leader")
   let anyScore = false;
-  for (const s of [player, ...bots]) {
+  const all = remotePlayer ? [player, remotePlayer, ...bots] : [player, ...bots];
+  for (const s of all) {
     if (s !== ship && s.alive && s.score > 0) { anyScore = true; break; }
   }
   if (anyScore && Math.random() < leaderBias) {
@@ -1643,22 +1645,44 @@ function cheatCyclePowerup() {
 }
 
 function handlePlayerTyping(shift) {
-  const w = player.words;
-  // When shift is held on a directional word: aim-only — change facing/firing
-  // direction (lastDir + edge graphics) without applying any thrust.
-  // Shift on the fire word has no effect (fire is fire).
+  // Determine the words for the local player.
+  // - Solo/host: read from local player.words (host owns simulation)
+  // - Joiner: read from snapshot — find the ship with id 'r' (the joiner)
+  let w;
+  if (NET.mode === 'joiner') {
+    if (!NET.remoteState) return;
+    const myShip = NET.remoteState.ships.find(s => s.id === 'r');
+    if (!myShip || !myShip.ws) return;
+    w = myShip.ws;
+  } else {
+    w = player.words;
+  }
+
   const aimOnly = !!shift;
+
+  // For solo/host we execute locally. For joiner we send inputs.
+  const exec = (kind, dx, dy) => {
+    if (NET.mode === 'joiner') {
+      sendInput(kind, dx, dy, !!shift);
+    } else {
+      if (kind === 'thrust') player.thrust(dx, dy);
+      else if (kind === 'aim') player.aim(dx, dy);
+      else if (kind === 'fire') player.fire();
+    }
+  };
+
   const candidates = [
-    { word: w.up, action: () => aimOnly ? player.aim(0, -1) : player.thrust(0, -1) },
-    { word: w.down, action: () => aimOnly ? player.aim(0, 1) : player.thrust(0, 1) },
-    { word: w.left, action: () => aimOnly ? player.aim(-1, 0) : player.thrust(-1, 0) },
-    { word: w.right, action: () => aimOnly ? player.aim(1, 0) : player.thrust(1, 0) },
-    { word: w.fire, action: () => player.fire() },
+    { word: w.up,    action: () => aimOnly ? exec('aim', 0, -1) : exec('thrust', 0, -1) },
+    { word: w.down,  action: () => aimOnly ? exec('aim', 0,  1) : exec('thrust', 0,  1) },
+    { word: w.left,  action: () => aimOnly ? exec('aim',-1,  0) : exec('thrust',-1,  0) },
+    { word: w.right, action: () => aimOnly ? exec('aim', 1,  0) : exec('thrust', 1,  0) },
+    { word: w.fire,  action: () => exec('fire', 0, 0) },
   ];
   for (const c of candidates) {
     if (typedBuffer === c.word) {
       c.action();
-      refreshWordSlot(player, c.word);
+      // Solo/host refreshes the word locally. Joiner's words update via snapshot.
+      if (NET.mode !== 'joiner') refreshWordSlot(player, c.word);
       typedBuffer = '';
       return;
     }
@@ -1680,17 +1704,136 @@ function refreshWordSlot(ship, oldWord) {
 // ----- Loop -----
 let lastT = performance.now();
 let paused = false;
-// Stub for joiner-mode rendering. Full snapshot-driven rendering is a pending
-// next step — for now we just clear the canvas and show a holding message.
+// Joiner-side rendering: hydrate the latest snapshot into stub ship objects
+// that have just enough shape for the existing draw() function to consume,
+// temporarily swap the globals, render, then restore. This reuses the entire
+// existing render pipeline without duplicating the draw code.
 function drawFromSnapshot() {
-  ctx.fillStyle = '#05060a';
-  ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = '#00ffe0';
-  ctx.font = '24px VT323, monospace';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('connected — joiner rendering not yet wired up', W / 2, H / 2);
-  ctx.fillText('(host can still see the full game)', W / 2, H / 2 + 30);
+  const state = NET.remoteState;
+  if (!state) {
+    // No snapshot yet — show a simple holding screen
+    ctx.fillStyle = '#05060a';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#00ffe0';
+    ctx.font = '24px VT323, monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('waiting for first snapshot...', W / 2, H / 2);
+    return;
+  }
+
+  // Build stub ships from snapshot. Each stub mimics the shape draw() expects.
+  const stubs = state.ships.map(sh => ({
+    id: sh.id,
+    name: sh.n,
+    x: sh.x, y: sh.y,
+    vx: sh.vx, vy: sh.vy,
+    score: sh.sc,
+    alive: !!sh.al,
+    size: sh.sz,
+    baseSize: 36, maxSize: 90,
+    lastDir: sh.ld || { x: 0, y: -1 },
+    words: sh.ws || { up: '', down: '', left: '', right: '', fire: '' },
+    color: sh.col,
+    isPlayer: !!sh.ip,
+    activePowerup: sh.pu ? { key: sh.pu, expiresAt: performance.now() + 20000 } : null,
+    shieldHP: sh.shp || 0,
+    killShieldUntil: sh.ksU || 0,
+    fireCooldown: 0,
+    flashAt: 0,
+    thrustAt: 0,
+    actionPulseAt: 0,
+    // Methods used during draw
+    hitHalf() { return this.size * 0.5 - 4; },
+    weaponColor() {
+      if (this.activePowerup) {
+        const def = POWERUP_DEFS[this.activePowerup.key];
+        if (def && (def.type === 'weapon' || this.activePowerup.key === 'boost')) return def.color;
+      }
+      return this.color;
+    },
+    isKing() { return state.kingId === this.id; },
+  }));
+
+  // The joiner is the ship with id 'r' (set by host's init).
+  const meStub = stubs.find(s => s.id === 'r');
+  if (!meStub) {
+    // Joiner ship not in snapshot yet — show holding screen
+    ctx.fillStyle = '#05060a';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#00ffe0';
+    ctx.font = '24px VT323, monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('connected — waiting for spawn...', W / 2, H / 2);
+    return;
+  }
+  // Mark the joiner's stub as the local player so draw() centers on them
+  // and treats them as the player ship for HUD/leaderboard etc.
+  for (const s of stubs) s.isPlayer = (s.id === 'r');
+
+  // Bullets: preserve isNuke/nukeRadius for proper rendering
+  const stubBullets = state.bullets.map(b => ({
+    x: b.x, y: b.y, color: b.c, isKing: !!b.k, offScreenFire: !!b.ofs,
+    isNuke: !!b.nk, nukeRadius: b.nr || 0,
+  }));
+  const stubPickups = state.pickups.map(p => ({
+    x: p.x, y: p.y, key: p.k,
+    expiresAt: p.exp || (performance.now() + 30000),
+    bob: 0, rejectFlashAt: 0, rejectNeed: 0,
+  }));
+  const stubShockwaves = state.shockwaves.map(sw => ({
+    x: sw.x, y: sw.y, radius: sw.r, maxRadius: sw.mr,
+    life: sw.lf, maxLife: sw.ml, color: sw.c,
+  }));
+  const stubKing = stubs.find(s => s.id === state.kingId) || null;
+
+  // Swap globals, render via the existing draw(), restore.
+  const savedPlayer = player;
+  const savedRemote = remotePlayer;
+  const savedBots = bots;
+  const savedBullets = bullets;
+  const savedPickups = pickups;
+  const savedShockwaves = shockwaves;
+  const savedKing = king;
+  const savedLevel = level;
+  const savedWorldW = WORLD.w;
+  const savedWorldH = WORLD.h;
+  const savedFlash = flash;
+
+  player = meStub;
+  remotePlayer = null; // joiner doesn't track a separate remotePlayer; everyone else is in `bots` array for draw
+  bots = stubs.filter(s => s.id !== 'r');
+  bullets = stubBullets;
+  pickups = stubPickups;
+  shockwaves = stubShockwaves;
+  king = stubKing;
+  level = state.level;
+  WORLD.w = state.worldW;
+  WORLD.h = state.worldH;
+  flash = state.flash || null;
+
+  try {
+    draw();
+  } finally {
+    player = savedPlayer;
+    remotePlayer = savedRemote;
+    bots = savedBots;
+    bullets = savedBullets;
+    pickups = savedPickups;
+    shockwaves = savedShockwaves;
+    king = savedKing;
+    level = savedLevel;
+    WORLD.w = savedWorldW;
+    WORLD.h = savedWorldH;
+    flash = savedFlash;
+  }
+
+  // Update HUD using the joiner's score from snapshot
+  highscoreValueEl.textContent = fmtScore(meStub.score);
+  if (LEVEL_CONFIG[state.level - 1]) {
+    levelText.textContent = LEVEL_CONFIG[state.level - 1].label;
+  }
 }
 
 function loop() {
@@ -1819,13 +1962,19 @@ function loop() {
     // High score check (covers kills, KOTH ticks, and any other score change)
     maybeUpdateHighScore();
 
-    // Level progression
+    // Level progression: ANY human player crossing the threshold advances.
+    // (Bots don't trigger level-ups — only real players do.)
     const cfg = LEVEL_CONFIG[level - 1];
-    if (player.score >= cfg.scoreToAdvance && level < LEVEL_CONFIG.length) {
+    const humans = [player, remotePlayer].filter(s => s);
+    const anyHumanReady = humans.some(s => s.score >= cfg.scoreToAdvance);
+    if (anyHumanReady && level < LEVEL_CONFIG.length) {
       level++;
       onLevelUp();
     }
   }
+
+  // Host: broadcast world snapshot to joiner (rate-limited inside the function)
+  if (NET.mode === 'host') broadcastSnapshot();
 
   draw();
   updateHUD();
@@ -1834,7 +1983,8 @@ function loop() {
 
 function updateKing(dt) {
   let best = null;
-  for (const s of [player, ...bots]) {
+  const allShips = remotePlayer ? [player, remotePlayer, ...bots] : [player, ...bots];
+  for (const s of allShips) {
     if (!s.alive) continue;
     if (!best || s.score > best.score) best = s;
   }
@@ -1847,7 +1997,8 @@ function applyWorldSizeForLevel() {
   WORLD.w = Math.round(BASE_WORLD.w * scale);
   WORLD.h = Math.round(BASE_WORLD.h * scale);
   // Ensure all entities are inside the new bounds (matters when shrinking)
-  for (const s of [player, ...bots]) {
+  const allShips = remotePlayer ? [player, remotePlayer, ...bots] : [player, ...bots];
+  for (const s of allShips) {
     if (!s) continue;
     s.x = ((s.x % WORLD.w) + WORLD.w) % WORLD.w;
     s.y = ((s.y % WORLD.h) + WORLD.h) % WORLD.h;
@@ -2504,7 +2655,9 @@ function updateHUD() {
     powerupBox.classList.remove('show');
   }
 
-  const ships = [player, ...bots].slice().sort((a,b) => b.score - a.score);
+  // All ships for leaderboard: include remotePlayer (in host mode) alongside player + bots
+  const allShips = remotePlayer ? [player, remotePlayer, ...bots] : [player, ...bots];
+  const ships = allShips.slice().sort((a,b) => b.score - a.score);
   let html = '<h3>// leaderboard</h3>';
   for (const s of ships) {
     const cls = [];
@@ -3042,7 +3195,7 @@ function broadcastSnapshot() {
   }
   const snap = {
     ships,
-    bullets: bullets.map(b => ({ x: Math.round(b.x), y: Math.round(b.y), c: b.color, k: b.isKing ? 1 : 0, ofs: b.offScreenFire ? 1 : 0 })),
+    bullets: bullets.map(b => ({ x: Math.round(b.x), y: Math.round(b.y), c: b.color, k: b.isKing ? 1 : 0, ofs: b.offScreenFire ? 1 : 0, nk: b.isNuke ? 1 : 0, nr: b.nukeRadius || 0 })),
     pickups: pickups.map(p => ({ x: Math.round(p.x), y: Math.round(p.y), k: p.key, exp: p.expiresAt })),
     shockwaves: shockwaves.map(sw => ({ x: Math.round(sw.x), y: Math.round(sw.y), r: Math.round(sw.radius), mr: sw.maxRadius, lf: sw.life, ml: sw.maxLife, c: sw.color })),
     level,
