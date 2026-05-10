@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WORDSTEROIDS — prototype</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=VT323&family=Major+Mono+Display&display=swap');
 
@@ -276,6 +277,146 @@
     margin-top: 8px;
   }
 
+  /* Multiplayer lobby */
+  .lobby {
+    position: absolute;
+    inset: 0;
+    z-index: 35;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(ellipse at center, #0a0d18 0%, #03040a 100%);
+    transition: opacity 0.4s;
+  }
+  .lobby.hidden { opacity: 0; pointer-events: none; }
+  .lobby-card {
+    text-align: center;
+    border: 1px solid rgba(255,45,111,0.25);
+    background: linear-gradient(180deg, rgba(20,24,38,0.95), rgba(8,10,18,0.95));
+    padding: 30px 50px;
+    min-width: 420px;
+    box-shadow: 0 0 60px rgba(255,45,111,0.12);
+  }
+  .lobby-title {
+    font-family: 'Major Mono Display', monospace;
+    font-size: 38px;
+    letter-spacing: 0.28em;
+    color: var(--neon);
+    text-shadow: 0 0 16px rgba(255,45,111,0.7);
+    padding-left: 0.28em;
+    margin-bottom: 8px;
+  }
+  .lobby-sub {
+    font-size: 16px;
+    color: var(--dim);
+    letter-spacing: 0.18em;
+    margin-bottom: 22px;
+  }
+  .lobby-input {
+    display: block;
+    width: 100%;
+    background: rgba(0,0,0,0.4);
+    border: 1px solid rgba(0,255,224,0.3);
+    color: var(--ink);
+    font-family: 'VT323', monospace;
+    font-size: 22px;
+    letter-spacing: 0.1em;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    text-align: center;
+    outline: none;
+    text-transform: uppercase;
+  }
+  .lobby-input:focus {
+    border-color: var(--neon-2);
+    box-shadow: 0 0 12px rgba(0,255,224,0.35);
+  }
+  .lobby-btn {
+    display: block;
+    width: 100%;
+    background: rgba(255,45,111,0.12);
+    border: 1px solid var(--neon);
+    color: var(--neon);
+    font-family: 'VT323', monospace;
+    font-size: 22px;
+    letter-spacing: 0.18em;
+    padding: 10px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: background 0.2s, color 0.2s;
+  }
+  .lobby-btn:hover {
+    background: var(--neon);
+    color: #05060a;
+  }
+  .lobby-btn.secondary {
+    border-color: var(--neon-2);
+    color: var(--neon-2);
+    background: rgba(0,255,224,0.08);
+  }
+  .lobby-btn.secondary:hover {
+    background: var(--neon-2);
+    color: #05060a;
+  }
+  .lobby-btn.tertiary {
+    border-color: var(--dim);
+    color: var(--dim);
+    background: transparent;
+  }
+  .lobby-btn.tertiary:hover {
+    background: var(--dim);
+    color: #05060a;
+  }
+  .lobby-section {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .lobby-status {
+    color: var(--neon-2);
+    font-family: 'VT323', monospace;
+    font-size: 18px;
+    margin-top: 14px;
+    letter-spacing: 0.1em;
+    min-height: 22px;
+  }
+  .lobby-status.error { color: var(--neon); }
+  .lobby-code {
+    font-family: 'Major Mono Display', monospace;
+    font-size: 32px;
+    letter-spacing: 0.2em;
+    color: var(--neon-3);
+    text-shadow: 0 0 10px rgba(255,210,63,0.5);
+    margin: 14px 0;
+    user-select: all;
+    cursor: text;
+  }
+  .lobby-share-url {
+    font-size: 14px;
+    color: var(--dim);
+    word-break: break-all;
+    margin-bottom: 14px;
+    user-select: all;
+    cursor: text;
+  }
+
+  /* Net status indicator (bottom-left, when in multiplayer) */
+  .netstatus {
+    position: absolute;
+    top: 16px; left: 18px;
+    z-index: 11;
+    pointer-events: none;
+    font-family: 'VT323', monospace;
+    font-size: 16px;
+    letter-spacing: 0.1em;
+    color: var(--neon-2);
+    text-shadow: 0 0 6px rgba(0,255,224,0.4);
+    display: none;
+  }
+  .netstatus.show { display: block; }
+  .netstatus.error { color: var(--neon); text-shadow: 0 0 6px rgba(255,45,111,0.4); }
+
   .vignette {
     position: absolute;
     inset: 0;
@@ -377,7 +518,7 @@
 <canvas id="game"></canvas>
 
 <div class="highscore" id="highscore">
-  <div class="label">HIGH SCORE</div>
+  <div class="label">SCORE</div>
   <div class="value" id="highscoreValue">0</div>
 </div>
 
@@ -421,6 +562,39 @@
   </div>
 </div>
 
+<div class="lobby hidden" id="lobby">
+  <div class="lobby-card">
+    <div class="lobby-title">WORDSTEROIDS</div>
+    <div class="lobby-sub">// pick your fight</div>
+
+    <input type="text" class="lobby-input" id="lobbyName" maxlength="14" placeholder="YOUR NAME" />
+
+    <div id="lobbyMain">
+      <button class="lobby-btn" id="btnSinglePlayer">PLAY SOLO</button>
+      <button class="lobby-btn secondary" id="btnHost">HOST 2-PLAYER</button>
+      <button class="lobby-btn tertiary" id="btnJoin">JOIN A FRIEND</button>
+    </div>
+
+    <div id="lobbyHost" style="display:none">
+      <div class="lobby-status">share this code with your friend</div>
+      <div class="lobby-code" id="hostCode">———</div>
+      <div class="lobby-status" style="font-size:14px">or send this URL</div>
+      <div class="lobby-share-url" id="hostUrl">—</div>
+      <div class="lobby-status" id="hostWaitMsg">waiting for joiner...</div>
+      <button class="lobby-btn tertiary" id="btnHostBack">CANCEL</button>
+    </div>
+
+    <div id="lobbyJoin" style="display:none">
+      <input type="text" class="lobby-input" id="joinCode" maxlength="20" placeholder="ENTER CODE" />
+      <button class="lobby-btn secondary" id="btnJoinConfirm">CONNECT</button>
+      <div class="lobby-status" id="joinStatus"></div>
+      <button class="lobby-btn tertiary" id="btnJoinBack">BACK</button>
+    </div>
+  </div>
+</div>
+
+<div class="netstatus" id="netstatus"></div>
+
 <div class="vignette"></div>
 <div class="scanlines"></div>
 
@@ -450,52 +624,56 @@ const WORLD_GROWTH_PER_LEVEL = 0.15; // 15% bigger per level (linear)
 
 // Powerups: pickup is FREE, but you must have at least `requires` score to collect.
 // Higher-tier powerups need higher scores, capping at game-changing ridiculous ones.
+// Powerups: pickup is FREE, but you must be at least `tier` level to collect.
+// Tier 1 (any level): boost, spread, blast, multishot
+// Tier 2 (level 2+):  shield, phantom
+// Tier 3 (level 3+):  vampire, nuke
 const POWERUP_DEFS = {
   shield: {
-    name: 'SHIELD', color: '#00ffe0', requires: 5,
+    name: 'SHIELD', color: '#00ffe0', tier: 2,
     desc: 'absorbs one hit. lasts until used.',
     duration: 0, // not used — shield is persistent
     type: 'passive',
   },
   boost: {
-    name: 'BOOST', color: '#5aff7c', requires: 5,
+    name: 'BOOST', color: '#5aff7c', tier: 1,
     desc: 'thrust 2× stronger, less drift.',
     duration: 20,
     type: 'passive',
   },
   spread: {
-    name: 'SPREAD', color: '#ff8c1a', requires: 8,
+    name: 'SPREAD', color: '#ff8c1a', tier: 1,
     desc: 'fire = 3-bullet fan.',
     duration: 20,
     type: 'weapon',
   },
   blast: {
-    name: 'BLAST', color: '#d65bff', requires: 8,
+    name: 'BLAST', color: '#d65bff', tier: 1,
     desc: 'fire = short-range shockwave.',
     duration: 20,
     type: 'weapon',
   },
   multishot: {
-    name: 'MULTI', color: '#3aa0ff', requires: 15,
+    name: 'MULTI', color: '#3aa0ff', tier: 1,
     desc: 'fire = bullets from all 4 sides at once.',
     duration: 20,
     type: 'weapon',
   },
   phantom: {
-    name: 'PHANTOM', color: '#a06bff', requires: 20,
-    desc: 'bots can barely see you. semi-invisible.',
+    name: 'PHANTOM', color: '#a06bff', tier: 2,
+    desc: 'invisible to enemies. they can\'t target you.',
     duration: 20,
     type: 'passive',
   },
   vampire: {
-    name: 'VAMPIRE', color: '#ff3050', requires: 25,
+    name: 'VAMPIRE', color: '#ff3050', tier: 3,
     desc: 'each kill refreshes your invuln shield.',
     duration: 20,
     type: 'passive',
   },
   nuke: {
-    name: 'NUKE', color: '#fff4c2', requires: 40,
-    desc: 'fire = annihilate every living enemy.',
+    name: 'NUKE', color: '#fff4c2', tier: 3,
+    desc: 'fire = launches a nuke. detonates on impact.',
     duration: 20,
     type: 'weapon',
   },
@@ -839,6 +1017,15 @@ function wrapDelta(a, b, span) {
   return d;
 }
 
+// True if world position (x, y) is currently inside the player's viewport.
+// Uses a small margin so the cutoff isn't jarringly precise at the screen edge.
+function isOnPlayerScreen(x, y, margin = 40) {
+  if (!player) return true;
+  const dx = wrapDelta(player.x, x, WORLD.w);
+  const dy = wrapDelta(player.y, y, WORLD.h);
+  return Math.abs(dx) <= W / 2 + margin && Math.abs(dy) <= H / 2 + margin;
+}
+
 // Score-to-size growth (logarithmic — fast early, slow later)
 // At score 0 -> baseSize, climbs toward maxSize asymptotically.
 function sizeForScore(score, baseSize, maxSize) {
@@ -868,10 +1055,11 @@ class Ship {
     this.maxSize = 90;
     this.size = this.baseSize;
     this.words = pickShipWords(level);
-    this.botCooldown = 2 + Math.random() * 4; // initial idle delay (level 1 friendly)
+    this.botCooldown = 0.5 + Math.random() * 1.5; // initial idle so bots don't all fire at boot
     this.fireCooldown = 0;
     this.flashAt = 0;
     this.thrustAt = 0;
+    this.actionPulseAt = 0; // brief inner-square pulse on any successful action
     // Powerup state
     this.activePowerup = null; // { key, expiresAt }
     this.shieldHP = 0; // shield consumes a hit
@@ -985,10 +1173,19 @@ class Ship {
     if (m > cap) { this.vx = this.vx / m * cap; this.vy = this.vy / m * cap; }
     this.lastDir = { x: dx, y: dy };
     this.thrustAt = performance.now();
+    if (this.isPlayer) this.actionPulseAt = performance.now();
+  }
+
+  // Change facing/firing direction without applying thrust (shift+word).
+  aim(dx, dy) {
+    this.lastDir = { x: dx, y: dy };
+    this.thrustAt = performance.now(); // reuse the thrust glow for the brief edge highlight
+    if (this.isPlayer) this.actionPulseAt = performance.now();
   }
 
   fire() {
     if (this.fireCooldown > 0) return;
+    if (this.isPlayer) this.actionPulseAt = performance.now();
     const isKing = this.isKing();
     const apk = this.activePowerup ? this.activePowerup.key : null;
     const isSpread = apk === 'spread';
@@ -998,22 +1195,37 @@ class Ship {
     const baseColor = this.weaponColor();
 
     if (isNuke) {
-      // Annihilate every living enemy. Long cooldown so it's not spam.
+      // Long cooldown so it's not spam.
       this.fireCooldown = 1.2;
-      for (const s of [player, ...bots]) {
-        if (!s.alive || s === this) continue;
-        s.damage(this);
-        // Also spawn a small explosion at each target for theatrics
-        spawnExplosion(s.x, s.y, baseColor, 18);
-      }
-      // A massive screen-filling shockwave from the firing ship
-      shockwaves.push({
+      // Fire a single large slow nuke projectile in lastDir.
+      // It explodes on hit with a wide circular blast (smaller than the old
+      // screen-clear nuke, but still very large).
+      const nukeAngle = Math.atan2(this.lastDir.y, this.lastDir.x);
+      const nukeSpeed = 460; // slower than normal bullets so it's dodgeable
+      const nukeBullet = {
         x: this.x, y: this.y,
-        radius: 0, maxRadius: 9999,
-        life: 0.8, maxLife: 0.8,
+        vx: Math.cos(nukeAngle) * nukeSpeed,
+        vy: Math.sin(nukeAngle) * nukeSpeed,
+        owner: this,
+        life: 2.4, // longer lifetime so it can travel further
         color: baseColor,
-      });
-      if (this.isPlayer) flashScreen('#ffffff', 0.5);
+        isKing,
+        hits: new Set(),
+        offScreenFire: !isOnPlayerScreen(this.x, this.y),
+        isNuke: true,            // marks it for the special render & explode logic
+        nukeRadius: 14,           // big visual size
+        nukeBlastRadius: 280,     // smaller than the old 9999 screen-clearer
+      };
+      bullets.push(nukeBullet);
+      // Off-screen muzzle flash so the player sees something was launched
+      if (!isOnPlayerScreen(this.x, this.y)) {
+        shockwaves.push({
+          x: this.x, y: this.y,
+          radius: 0, maxRadius: 80,
+          life: 0.4, maxLife: 0.4,
+          color: baseColor,
+        });
+      }
       return;
     }
 
@@ -1052,6 +1264,9 @@ class Ship {
         color: baseColor,
         isKing,
         hits: new Set(),
+        // Was the owner off-screen at fire time? If so, this bullet is invisible
+        // to the player and can't hit them. (Owner-on-screen at fire = always visible/dangerous.)
+        offScreenFire: !isOnPlayerScreen(owner.x, owner.y),
       };
     }
 
@@ -1067,6 +1282,18 @@ class Ship {
       bullets.push(makeBullet(dirAngle + 0.25, this));
     } else {
       bullets.push(makeBullet(dirAngle, this));
+    }
+
+    // Muzzle-flash hint: if the shooter is off-screen, spawn a small harmless
+    // shockwave at their location so the player sees where shots came from
+    // (the bullets themselves stay invisible).
+    if (!isOnPlayerScreen(this.x, this.y)) {
+      shockwaves.push({
+        x: this.x, y: this.y,
+        radius: 0, maxRadius: 60,
+        life: 0.3, maxLife: 0.3,
+        color: baseColor,
+      });
     }
   }
 
@@ -1099,25 +1326,26 @@ class Ship {
     if (this.y < 0) this.y += WORLD.h;
     if (this.y > WORLD.h) this.y -= WORLD.h;
 
-    // Pickup gating (wrap-aware). Free to take, but you must meet `requires` score.
+    // Pickup gating (wrap-aware). Free to take, but you must be at least
+    // tier-level to collect (tier 1 = any level, tier 2 = level 2+, etc).
     for (let i = pickups.length - 1; i >= 0; i--) {
       const p = pickups[i];
       const dx = wrapDelta(this.x, p.x, WORLD.w);
       const dy = wrapDelta(this.y, p.y, WORLD.h);
       if (Math.abs(dx) < this.size/2 + 16 && Math.abs(dy) < this.size/2 + 16) {
         const def = POWERUP_DEFS[p.key];
-        const need = def.requires;
-        if (this.score >= need) {
+        const need = def.tier;
+        if (level >= need) {
           this.applyPowerup(p.key);
           // Remember where it was collected so the next spawn can be far away
           lastPickupLocation = { x: p.x, y: p.y };
           pickups.splice(i, 1);
           if (this.isPlayer) flashScreen(def.color, 0.2);
         } else if (this.isPlayer) {
-          // floating "NEED N" text — score needed, not deducted
+          // floating "NEED LEVEL N" text
           if (!p.rejectFlashAt || performance.now() - p.rejectFlashAt > 800) {
             p.rejectFlashAt = performance.now();
-            p.rejectNeed = need - this.score;
+            p.rejectNeed = need;
           }
         }
       }
@@ -1128,18 +1356,18 @@ class Ship {
       this.botCooldown -= dt;
       if (this.botCooldown <= 0) {
         // Difficulty curve scales smoothly with level number.
-        // Uses a soft curve so it keeps getting harder past level 6,
-        // approaching but never quite reaching its limit.
+        // Bots are aggressive even at L1 and ramp toward brutal at higher levels.
         const lvl = level;
-        const t = 1 - Math.pow(0.85, Math.max(0, lvl - 1)); // 0 at L1, ~0.5 at L5, ~0.8 at L10, ~0.95 at L19
-        // Action timing — keeps shrinking with a 0.4s hard floor
-        const minInterval = Math.max(0.4, 3.5 - t * 3.0);  // 3.5s → ~0.4s
-        const intervalRange = Math.max(0.6, 2.5 - t * 1.9); // 2.5s → ~0.6s
+        const t = 1 - Math.pow(0.80, Math.max(0, lvl - 1)); // 0 at L1, ~0.6 at L5, ~0.9 at L10, ~0.99 at L20
+        // Action timing — short intervals throughout, bottoms out at ~0.35s
+        const minInterval = Math.max(0.35, 1.8 - t * 1.5);  // 1.8s → ~0.35s
+        const intervalRange = Math.max(0.5, 1.4 - t * 0.95); // 1.4s → ~0.5s
         const actionInterval = minInterval + Math.random() * intervalRange;
-        // Aim and fire chances climb toward asymptotes
-        const aimChance = 0.2 + t * 0.78;          // 0.2 → ~0.98
-        const fireChance = 0.20 + t * 0.30;        // 0.20 → ~0.50
-        // Leader-hunting bias: bots increasingly target the highest-scoring enemy
+        // Aim accuracy starts engaged (45%) and climbs toward near-perfect
+        const aimChance = 0.45 + t * 0.53;          // 0.45 → ~0.98
+        // Fire chance: 40% at L1 means ~10 shots/min per bot at start, rising to ~57% at high levels
+        const fireChance = 0.40 + t * 0.20;         // 0.40 → ~0.60
+        // Leader-hunting bias: starts mild, climbs with level
         const leaderBias = Math.min(0.85, t * 0.95); // 0 → ~0.85
         this.botCooldown = actionInterval;
 
@@ -1225,9 +1453,8 @@ function pickNearestEnemy(ship) {
   let best = null, bd = Infinity;
   for (const s of [player, ...bots]) {
     if (s === ship || !s.alive) continue;
-    // PHANTOM: 70% chance bots don't see this ship as a valid target
-    const isPhantom = s.activePowerup && s.activePowerup.key === 'phantom';
-    if (isPhantom && Math.random() < 0.7) continue;
+    // PHANTOM: completely invisible to bot targeting
+    if (s.activePowerup && s.activePowerup.key === 'phantom') continue;
     const dx = wrapDelta(ship.x, s.x, WORLD.w);
     const dy = wrapDelta(ship.y, s.y, WORLD.h);
     const d = Math.hypot(dx, dy);
@@ -1236,13 +1463,12 @@ function pickNearestEnemy(ship) {
   return best;
 }
 
-// Picks the highest-scoring living enemy (the leader). PHANTOM-aware.
+// Picks the highest-scoring living enemy (the leader). Skips PHANTOMs.
 function pickLeaderEnemy(ship) {
   let best = null;
   for (const s of [player, ...bots]) {
     if (s === ship || !s.alive) continue;
-    const isPhantom = s.activePowerup && s.activePowerup.key === 'phantom';
-    if (isPhantom && Math.random() < 0.7) continue;
+    if (s.activePowerup && s.activePowerup.key === 'phantom') continue;
     if (!best || s.score > best.score) best = s;
   }
   return best;
@@ -1263,17 +1489,58 @@ function pickHostileTarget(ship, leaderBias) {
   return pickNearestEnemy(ship);
 }
 
+// In multiplayer:
+//   host owns 'player' (local) and 'remotePlayer' (the joiner's ship), plus bots.
+//   joiner has only minimal local state — everything is rendered from snapshots.
+let remotePlayer = null;
+
 function init() {
+  // Player color is always cyan for the local player on host/solo.
+  // For joiner, color is assigned by host but we use a placeholder locally.
+  if (NET.mode === 'joiner') {
+    // Joiner: minimal init. No bots, no local player ship — all comes from snapshots.
+    // We still create a placeholder 'player' so existing code doesn't crash, but
+    // most fields will be overwritten via snapshots.
+    player = new Ship({
+      id: 'remote', name: NET.myName, isPlayer: true,
+      x: WORLD.w / 2, y: WORLD.h / 2,
+      color: '#ff2d6f', // joiner is hot pink in the snapshot scheme
+    });
+    return;
+  }
+
+  // Solo and host setup
   player = new Ship({
-    id: 'p', name: 'YOU', isPlayer: true,
-    x: WORLD.w/2, y: WORLD.h/2,
+    id: 'p', name: NET.myName, isPlayer: true,
+    x: WORLD.w / 2, y: WORLD.h / 2,
     color: '#00ffe0',
   });
-  const botColors = ['#ff2d6f','#a06bff','#1ec8ff','#7cff5a','#ff8c42'];
-  const botNames = ['BLACKBYTE','CUTLASS','KRAKEN','SCURVY','GIBBET'];
-  for (let i = 0; i < 5; i++) {
+
+  if (NET.mode === 'host') {
+    // Add the joiner as a second human ship (host-side)
+    remotePlayer = new Ship({
+      id: 'r', name: NET.remoteName, isPlayer: true, // isPlayer=true for collision/scoring
+      x: Math.random() * WORLD.w, y: Math.random() * WORLD.h,
+      color: '#ff2d6f',
+    });
+    remotePlayer.isRemote = true; // tag so we skip local input handling
+  }
+
+  // Solo: original palette. Host: the joiner takes hot pink (#ff2d6f),
+  // so BLACKBYTE shifts to a different color in host mode.
+  let botColors, botNames;
+  if (NET.mode === 'host') {
+    // Host: 6 bots, joiner is the hot-pink player. BLACKBYTE goes magenta.
+    botColors = ['#ff66c4','#a06bff','#1ec8ff','#7cff5a','#ff8c42','#9aa8ff'];
+    botNames  = ['BLACKBYTE','CUTLASS','KRAKEN','SCURVY','NULLBEARD','VESPER'];
+  } else {
+    // Solo: 5 bots, exactly as it was before multiplayer.
+    botColors = ['#ff2d6f','#a06bff','#1ec8ff','#7cff5a','#ff8c42'];
+    botNames  = ['BLACKBYTE','CUTLASS','KRAKEN','SCURVY','NULLBEARD'];
+  }
+  for (let i = 0; i < botColors.length; i++) {
     bots.push(new Ship({
-      id: 'b'+i, name: botNames[i],
+      id: 'b' + i, name: botNames[i],
       x: Math.random() * WORLD.w,
       y: Math.random() * WORLD.h,
       color: botColors[i],
@@ -1321,6 +1588,12 @@ window.addEventListener('keydown', (e) => {
     return;
   }
 
+  // Cheat: backtick (`) cycles through powerups and grants the next one to the player
+  if (e.key === '`' || e.key === '~') {
+    cheatCyclePowerup();
+    return;
+  }
+
   // Cheat keys: number 1-9 warps to that level (without changing score),
   // 0 resets the high score. Active even when dead.
   if (e.key >= '0' && e.key <= '9' && e.key.length === 1) {
@@ -1335,7 +1608,7 @@ window.addEventListener('keydown', (e) => {
   if (!player.alive) return;
   if (e.key.length === 1 && /[a-zA-Z]/.test(e.key)) {
     typedBuffer += e.key.toLowerCase();
-    handlePlayerTyping();
+    handlePlayerTyping(e.shiftKey);
   } else if (e.key === 'Backspace') {
     typedBuffer = typedBuffer.slice(0, -1);
   } else if (e.key === 'Escape') {
@@ -1354,17 +1627,32 @@ function cheatWarpToLevel(targetLevel) {
 
 function cheatResetHighScore() {
   highScore = 0;
-  highscoreValueEl.textContent = fmtScore(0);
   saveHighScore();
 }
 
-function handlePlayerTyping() {
+let cheatPowerupIdx = 0;
+function cheatCyclePowerup() {
+  if (!player || !player.alive) return;
+  const keys = Object.keys(POWERUP_DEFS);
+  const key = keys[cheatPowerupIdx % keys.length];
+  cheatPowerupIdx++;
+  player.applyPowerup(key);
+  // Brief screen flash matching the powerup color, just like a normal pickup
+  const def = POWERUP_DEFS[key];
+  flashScreen(def.color, 0.2);
+}
+
+function handlePlayerTyping(shift) {
   const w = player.words;
+  // When shift is held on a directional word: aim-only — change facing/firing
+  // direction (lastDir + edge graphics) without applying any thrust.
+  // Shift on the fire word has no effect (fire is fire).
+  const aimOnly = !!shift;
   const candidates = [
-    { word: w.up, action: () => player.thrust(0, -1) },
-    { word: w.down, action: () => player.thrust(0, 1) },
-    { word: w.left, action: () => player.thrust(-1, 0) },
-    { word: w.right, action: () => player.thrust(1, 0) },
+    { word: w.up, action: () => aimOnly ? player.aim(0, -1) : player.thrust(0, -1) },
+    { word: w.down, action: () => aimOnly ? player.aim(0, 1) : player.thrust(0, 1) },
+    { word: w.left, action: () => aimOnly ? player.aim(-1, 0) : player.thrust(-1, 0) },
+    { word: w.right, action: () => aimOnly ? player.aim(1, 0) : player.thrust(1, 0) },
     { word: w.fire, action: () => player.fire() },
   ];
   for (const c of candidates) {
@@ -1392,13 +1680,35 @@ function refreshWordSlot(ship, oldWord) {
 // ----- Loop -----
 let lastT = performance.now();
 let paused = false;
+// Stub for joiner-mode rendering. Full snapshot-driven rendering is a pending
+// next step — for now we just clear the canvas and show a holding message.
+function drawFromSnapshot() {
+  ctx.fillStyle = '#05060a';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#00ffe0';
+  ctx.font = '24px VT323, monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('connected — joiner rendering not yet wired up', W / 2, H / 2);
+  ctx.fillText('(host can still see the full game)', W / 2, H / 2 + 30);
+}
+
 function loop() {
   const now = performance.now();
   const dt = paused ? 0 : Math.min(0.05, (now - lastT) / 1000);
   lastT = now;
 
+  // ---- JOINER MODE: skip simulation, render from latest snapshot ----
+  if (NET.mode === 'joiner') {
+    drawFromSnapshot();
+    requestAnimationFrame(loop);
+    return;
+  }
+
+  // ---- HOST or SOLO: run authoritative simulation ----
   if (!paused) {
     player.update(dt);
+    if (remotePlayer) remotePlayer.update(dt);
     for (const b of bots) b.update(dt);
 
     // bullets
@@ -1413,16 +1723,48 @@ function loop() {
       if (b.y < 0) b.y += WORLD.h;
       if (b.y > WORLD.h) b.y -= WORLD.h;
 
-      // wrap-aware collision
+      // wrap-aware collision against all ships including remotePlayer
+      const allShips = remotePlayer ? [player, remotePlayer, ...bots] : [player, ...bots];
       let removed = false;
-      for (const s of [player, ...bots]) {
+      for (const s of allShips) {
         if (!s.alive || s === b.owner) continue;
         if (b.hits && b.hits.has(s.id)) continue;
+        if (b.offScreenFire && s.isPlayer) continue;
         const dx = wrapDelta(b.x, s.x, WORLD.w);
         const dy = wrapDelta(b.y, s.y, WORLD.h);
         const hh = s.hitHalf();
-        if (Math.abs(dx) < hh && Math.abs(dy) < hh) {
-          s.damage(b.owner);
+        // NUKEs use a slightly larger contact size (because the projectile is big)
+        const contact = b.isNuke ? hh + (b.nukeRadius || 14) : hh;
+        if (Math.abs(dx) < contact && Math.abs(dy) < contact) {
+          if (b.isNuke) {
+            // NUKE detonation: spawn a large blast that damages every ship within radius.
+            const blastR = b.nukeBlastRadius || 280;
+            // Visual shockwave at the impact point
+            shockwaves.push({
+              x: b.x, y: b.y,
+              radius: 0, maxRadius: blastR,
+              life: 0.7, maxLife: 0.7,
+              color: b.color,
+            });
+            // Damage every ship in radius (including the one we hit)
+            for (const t of allShips) {
+              if (!t.alive || t === b.owner) continue;
+              const tdx = wrapDelta(b.x, t.x, WORLD.w);
+              const tdy = wrapDelta(b.y, t.y, WORLD.h);
+              if (Math.hypot(tdx, tdy) <= blastR + t.hitHalf()) {
+                t.damage(b.owner);
+                spawnExplosion(t.x, t.y, b.color, 14);
+              }
+            }
+            // Red flash for the player if the blast intersects their viewport
+            const pdx = wrapDelta(b.x, player.x, WORLD.w);
+            const pdy = wrapDelta(b.y, player.y, WORLD.h);
+            if (Math.abs(pdx) < W/2 + blastR && Math.abs(pdy) < H/2 + blastR) {
+              flashScreen('#ff2030', 0.4);
+            }
+          } else {
+            s.damage(b.owner);
+          }
           bullets.splice(i, 1);
           removed = true;
           break;
@@ -1587,6 +1929,29 @@ function draw() {
     ctx.beginPath();
     ctx.arc(sx, sy + bob, 22 * pulse, 0, Math.PI*2);
     ctx.fill();
+
+    // Emanating rings — two concentric hollow rings expanding outward and
+    // fading as they grow. Each ring is offset in phase so they cascade gently.
+    const RING_PERIOD_MS = 3000;
+    const RING_MIN_R = 12;
+    const RING_MAX_R = 50;
+    const phaseOffsetMs = (p.bob * 1000) % RING_PERIOD_MS; // per-pickup variation
+    for (let i = 0; i < 2; i++) {
+      const phase = ((performance.now() + phaseOffsetMs + i * (RING_PERIOD_MS / 2)) % RING_PERIOD_MS) / RING_PERIOD_MS;
+      const r = RING_MIN_R + (RING_MAX_R - RING_MIN_R) * phase;
+      const ringAlpha = (1 - phase) * 0.55 * blinkAlpha;
+      ctx.strokeStyle = def.color;
+      ctx.globalAlpha = ringAlpha;
+      ctx.lineWidth = 1.5;
+      ctx.shadowColor = def.color;
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.arc(sx, sy + bob, r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = blinkAlpha; // restore for the orb itself
+
     ctx.fillStyle = def.color;
     ctx.shadowColor = def.color;
     ctx.shadowBlur = 14;
@@ -1606,10 +1971,11 @@ function draw() {
     ctx.fillStyle = def.color;
     ctx.shadowColor = def.color;
     ctx.shadowBlur = 6;
-    ctx.fillText(`${def.name} · NEEDS ${fmtScore(def.requires)}`, sx, sy + bob + 24);
+    const tierLabel = def.tier === 1 ? 'ANY LVL' : `LVL ${def.tier}+`;
+    ctx.fillText(`${def.name} · ${tierLabel}`, sx, sy + bob + 24);
     ctx.shadowBlur = 0;
 
-    // "NEED N" rejection text — fades out
+    // "NEED LEVEL N" rejection text — fades out
     if (p.rejectFlashAt) {
       const elapsed = performance.now() - p.rejectFlashAt;
       if (elapsed < 800) {
@@ -1619,7 +1985,7 @@ function draw() {
         ctx.shadowColor = '#ff2d6f';
         ctx.shadowBlur = 8;
         ctx.font = 'bold 16px VT323, monospace';
-        ctx.fillText(`NEED ${fmtScore(p.rejectNeed)} MORE`, sx, sy + bob - 28 - (1 - a) * 14);
+        ctx.fillText(`NEED LEVEL ${p.rejectNeed}`, sx, sy + bob - 28 - (1 - a) * 14);
         ctx.globalAlpha = 1;
         ctx.shadowBlur = 0;
       }
@@ -1654,12 +2020,42 @@ function draw() {
 
   // bullets
   for (const b of bullets) {
+    // Bullets fired from outside the player's viewport stay invisible
+    if (b.offScreenFire) continue;
     const sxw = wrapDelta(cam.x + W/2, b.x, WORLD.w);
     const syw = wrapDelta(cam.y + H/2, b.y, WORLD.h);
     const sx = W/2 + sxw;
     const sy = H/2 + syw;
-    if (sx < -20 || sx > W+20 || sy < -20 || sy > H+20) continue;
-    if (b.isKing) {
+    if (sx < -40 || sx > W+40 || sy < -40 || sy > H+40) continue;
+    if (b.isNuke) {
+      // Big pulsing orb with red-hot core. Hard to miss.
+      const t = performance.now() / 100;
+      const pulse = 1 + Math.sin(t) * 0.18;
+      const r = (b.nukeRadius || 14) * pulse;
+      // Outer halo
+      ctx.fillStyle = b.color;
+      ctx.globalAlpha = 0.25;
+      ctx.shadowColor = b.color;
+      ctx.shadowBlur = 28;
+      ctx.beginPath();
+      ctx.arc(sx, sy, r * 1.7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      // Mid yellow body
+      ctx.fillStyle = b.color;
+      ctx.shadowBlur = 16;
+      ctx.beginPath();
+      ctx.arc(sx, sy, r, 0, Math.PI * 2);
+      ctx.fill();
+      // Red-hot inner core
+      ctx.shadowColor = '#ff2030';
+      ctx.shadowBlur = 14;
+      ctx.fillStyle = '#ff2030';
+      ctx.beginPath();
+      ctx.arc(sx, sy, r * 0.45, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    } else if (b.isKing) {
       ctx.fillStyle = 'rgba(255,210,63,0.3)';
       ctx.beginPath();
       ctx.arc(sx, sy, 9, 0, Math.PI*2);
@@ -1758,6 +2154,20 @@ function drawShip(s, cam) {
   const bodyColor = flashed ? '#ffffff' : 'rgba(10,13,24,0.85)';
   ctx.fillStyle = bodyColor;
   ctx.fillRect(sx - half, sy - half, size, size);
+
+  // Player-only inner pulse on successful thrust/aim/fire — brief flash that
+  // confirms the action registered.
+  if (s.isPlayer && s.actionPulseAt) {
+    const elapsed = performance.now() - s.actionPulseAt;
+    const PULSE_MS = 220;
+    if (elapsed < PULSE_MS) {
+      const t = 1 - elapsed / PULSE_MS; // 1 -> 0
+      const alpha = t * 0.55;
+      const inset = 4 + (1 - t) * (size * 0.15); // grows inward as it fades
+      ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+      ctx.fillRect(sx - half + inset, sy - half + inset, size - inset * 2, size - inset * 2);
+    }
+  }
 
   // Neon border. King's border BLINKS dramatically — pulsing brightness + glow.
   if (isKingShip) {
@@ -1967,11 +2377,11 @@ function drawShip(s, cam) {
     drawEdgeWord(w.fire, sx, sy, true);
   } else {
     drawEdgeWord(w.fire, sx, sy - 6, true);
-    // Bots show name + score INSIDE the square at the bottom
+    // Bots show just the name inside the square (score is on the leaderboard)
     const nameFontSize = Math.max(10, Math.round(size * 0.18));
     ctx.font = `${nameFontSize}px VT323, monospace`;
     ctx.fillStyle = isKingShip ? '#ffd23f' : 'rgba(230,241,255,0.55)';
-    ctx.fillText(`${s.name} · ${fmtScore(s.score)}`, sx, sy + half - nameFontSize * 0.8);
+    ctx.fillText(s.name, sx, sy + half - nameFontSize * 0.8);
   }
 
   if (isKingShip) {
@@ -2069,6 +2479,9 @@ const powerupFill = document.getElementById('powerupFill');
 
 function updateHUD() {
   levelText.textContent = LEVEL_CONFIG[level - 1].label;
+  // Top-center shows the player's live score (high score still tracked in
+  // storage and surfaced on death-overlay if it gets beaten).
+  highscoreValueEl.textContent = fmtScore(player.score);
 
   // powerup box
   if (player.activePowerup) {
@@ -2196,10 +2609,7 @@ async function loadHighScore() {
     const result = await window.storage.get(HIGHSCORE_KEY);
     if (result && result.value) {
       const parsed = parseFloat(result.value);
-      if (!isNaN(parsed)) {
-        highScore = parsed;
-        highscoreValueEl.textContent = fmtScore(highScore);
-      }
+      if (!isNaN(parsed)) highScore = parsed;
     }
   } catch (e) {
     // Key doesn't exist yet, or storage unavailable — start at 0
@@ -2218,8 +2628,7 @@ async function saveHighScore() {
 function maybeUpdateHighScore() {
   if (player.score > highScore) {
     highScore = player.score;
-    highscoreValueEl.textContent = fmtScore(highScore);
-    // Trigger celebration pulse
+    // Trigger celebration pulse on the live score display
     highscoreEl.classList.remove('beat');
     void highscoreEl.offsetWidth; // restart animation
     highscoreEl.classList.add('beat');
@@ -2358,10 +2767,337 @@ function showAudioToast(msg) {
   audioToastTimer = setTimeout(() => { el.style.opacity = '0'; }, 1600);
 }
 
+// ============================================================
+// MULTIPLAYER (peer-to-peer via WebRTC + PeerJS broker)
+// ============================================================
+// Architecture:
+//   - HOST runs the authoritative simulation. Same code as solo, plus broadcasts
+//     state snapshots to JOINER ~20 times/sec.
+//   - JOINER renders state from snapshots. Sends inputs (thrust, aim, fire,
+//     pickup) to host as messages. Local player typing happens locally; only
+//     completed actions cross the wire.
+//   - Bots only run on the host.
+//
+// Mode is one of: 'solo' (default), 'host', 'joiner'.
+const NET = {
+  mode: 'solo',
+  peer: null,         // PeerJS Peer instance
+  conn: null,         // active connection (host has 1 conn to joiner; joiner has 1 to host)
+  myName: 'YOU',
+  remoteName: 'GUEST',
+  hostCode: null,
+  // Snapshot pacing
+  snapshotIntervalMs: 50,
+  lastSnapshotAt: 0,
+  // Joiner state cache: latest received snapshot
+  remoteState: null,
+  remoteLastSeen: 0,
+  // Joiner input queue: each input is delivered to host as a message
+};
+
+// Generate a short, friendly code for hosting (e.g. "WORDS-A7K2").
+function generateHostCode() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // skip ambiguous I/O/0/1
+  let s = '';
+  for (let i = 0; i < 4; i++) s += alphabet[Math.floor(Math.random() * alphabet.length)];
+  return 'WORDS-' + s;
+}
+
+// Lobby DOM helpers
+const lobbyEl = document.getElementById('lobby');
+const lobbyName = document.getElementById('lobbyName');
+const lobbyMain = document.getElementById('lobbyMain');
+const lobbyHost = document.getElementById('lobbyHost');
+const lobbyJoinPanel = document.getElementById('lobbyJoin');
+const hostCodeEl = document.getElementById('hostCode');
+const hostUrlEl = document.getElementById('hostUrl');
+const hostWaitMsg = document.getElementById('hostWaitMsg');
+const joinCodeInput = document.getElementById('joinCode');
+const joinStatus = document.getElementById('joinStatus');
+const netstatusEl = document.getElementById('netstatus');
+
+function showLobby() {
+  lobbyEl.classList.remove('hidden');
+  lobbyMain.style.display = 'block';
+  lobbyHost.style.display = 'none';
+  lobbyJoinPanel.style.display = 'none';
+  // Restore last name
+  try {
+    const saved = localStorage.getItem('wordsteroids:name');
+    if (saved) lobbyName.value = saved;
+  } catch (e) {}
+  // Auto-fill code from URL ?join=XXX
+  const params = new URLSearchParams(window.location.search);
+  const j = params.get('join');
+  if (j) {
+    joinCodeInput.value = j.toUpperCase();
+    showJoinPanel();
+  }
+  setTimeout(() => lobbyName.focus(), 50);
+}
+
+function hideLobby() { lobbyEl.classList.add('hidden'); }
+
+function getMyName() {
+  let n = (lobbyName.value || '').trim().toUpperCase().slice(0, 14);
+  if (!n) n = 'PLAYER' + Math.floor(Math.random() * 90 + 10);
+  try { localStorage.setItem('wordsteroids:name', n); } catch (e) {}
+  return n;
+}
+
+function showHostPanel() {
+  lobbyMain.style.display = 'none';
+  lobbyHost.style.display = 'block';
+}
+function showJoinPanel() {
+  lobbyMain.style.display = 'none';
+  lobbyJoinPanel.style.display = 'block';
+  setTimeout(() => joinCodeInput.focus(), 50);
+}
+function showLobbyMain() {
+  lobbyMain.style.display = 'block';
+  lobbyHost.style.display = 'none';
+  lobbyJoinPanel.style.display = 'none';
+}
+
+function updateNetStatus(text, isError) {
+  if (!text) {
+    netstatusEl.classList.remove('show');
+    return;
+  }
+  netstatusEl.classList.add('show');
+  netstatusEl.classList.toggle('error', !!isError);
+  netstatusEl.textContent = text;
+}
+
+// ----- Host flow -----
+function startHostingGame() {
+  NET.myName = getMyName();
+  NET.hostCode = generateHostCode();
+  showHostPanel();
+  hostCodeEl.textContent = NET.hostCode;
+  const url = new URL(window.location.href);
+  url.search = '?join=' + encodeURIComponent(NET.hostCode);
+  hostUrlEl.textContent = url.toString();
+  hostWaitMsg.textContent = 'connecting to broker...';
+
+  // PeerJS uses public broker by default. Use our code as the peer ID.
+  NET.peer = new Peer(NET.hostCode);
+  NET.peer.on('open', id => {
+    hostWaitMsg.textContent = 'waiting for joiner...';
+  });
+  NET.peer.on('connection', conn => {
+    NET.conn = conn;
+    conn.on('open', () => {
+      // Receive joiner's name first
+      conn.send({ type: 'hello', name: NET.myName });
+    });
+    conn.on('data', data => onHostReceive(data));
+    conn.on('close', () => {
+      updateNetStatus('joiner disconnected — game over', true);
+      NET.mode = 'solo';
+    });
+    conn.on('error', err => {
+      console.warn('host conn error:', err);
+    });
+    // Joiner is in. Start the multiplayer game.
+    NET.mode = 'host';
+    hideLobby();
+    startGame();
+    updateNetStatus(`hosting · code ${NET.hostCode}`);
+  });
+  NET.peer.on('error', err => {
+    console.warn('peer error:', err);
+    if (err.type === 'unavailable-id') {
+      hostWaitMsg.textContent = 'code already in use, try again';
+    } else if (err.type === 'network' || err.type === 'server-error') {
+      hostWaitMsg.textContent = 'broker unreachable. check connection.';
+    } else {
+      hostWaitMsg.textContent = 'error: ' + err.type;
+    }
+  });
+}
+
+function onHostReceive(msg) {
+  if (!msg) return;
+  switch (msg.type) {
+    case 'hello': {
+      NET.remoteName = String(msg.name || 'GUEST').toUpperCase().slice(0, 14);
+      // Rename the second player slot in the game state
+      if (typeof remotePlayer !== 'undefined' && remotePlayer) {
+        remotePlayer.name = NET.remoteName;
+      }
+      break;
+    }
+    case 'input': {
+      // Joiner sent an input action. Apply it on host's authoritative simulation.
+      applyRemoteInput(msg.action, msg.dx, msg.dy, msg.shift);
+      break;
+    }
+  }
+}
+
+// Translate joiner's action into a call on the remotePlayer ship
+function applyRemoteInput(action, dx, dy, shift) {
+  if (typeof remotePlayer === 'undefined' || !remotePlayer || !remotePlayer.alive) return;
+  if (action === 'thrust') remotePlayer.thrust(dx, dy);
+  else if (action === 'aim') remotePlayer.aim(dx, dy);
+  else if (action === 'fire') remotePlayer.fire();
+}
+
+// ----- Joiner flow -----
+function startJoiningGame() {
+  NET.myName = getMyName();
+  const code = (joinCodeInput.value || '').trim().toUpperCase();
+  if (!code) { joinStatus.textContent = 'enter a code'; joinStatus.classList.add('error'); return; }
+  joinStatus.classList.remove('error');
+  joinStatus.textContent = 'connecting to broker...';
+
+  // Use a random peer ID for the joiner (PeerJS will assign one if undefined)
+  NET.peer = new Peer();
+  NET.peer.on('open', () => {
+    joinStatus.textContent = 'connecting to host...';
+    const conn = NET.peer.connect(code, { reliable: true });
+    NET.conn = conn;
+    conn.on('open', () => {
+      conn.send({ type: 'hello', name: NET.myName });
+      NET.mode = 'joiner';
+      hideLobby();
+      startGame(); // joiner setup — minimal
+      updateNetStatus(`connected to ${code}`);
+    });
+    conn.on('data', data => onJoinerReceive(data));
+    conn.on('close', () => {
+      updateNetStatus('host disconnected — game over', true);
+      NET.mode = 'solo';
+    });
+    conn.on('error', err => {
+      joinStatus.classList.add('error');
+      joinStatus.textContent = 'connect failed: ' + err.type;
+    });
+  });
+  NET.peer.on('error', err => {
+    joinStatus.classList.add('error');
+    if (err.type === 'peer-unavailable') {
+      joinStatus.textContent = 'no host with that code';
+    } else if (err.type === 'network' || err.type === 'server-error') {
+      joinStatus.textContent = 'broker unreachable. check connection.';
+    } else {
+      joinStatus.textContent = 'error: ' + err.type;
+    }
+  });
+}
+
+function onJoinerReceive(msg) {
+  if (!msg) return;
+  switch (msg.type) {
+    case 'hello': {
+      NET.remoteName = String(msg.name || 'HOST').toUpperCase().slice(0, 14);
+      break;
+    }
+    case 'snapshot': {
+      NET.remoteState = msg.s;
+      NET.remoteLastSeen = performance.now();
+      break;
+    }
+  }
+}
+
+// Joiner-side: send input to host via the data channel
+function sendInput(action, dx, dy, shift) {
+  if (NET.mode !== 'joiner' || !NET.conn || !NET.conn.open) return;
+  try {
+    NET.conn.send({ type: 'input', action, dx, dy, shift });
+  } catch (e) {
+    console.warn('send input failed:', e);
+  }
+}
+
+// Host-side: serialize game state and broadcast to joiner
+function broadcastSnapshot() {
+  if (NET.mode !== 'host' || !NET.conn || !NET.conn.open) return;
+  const now = performance.now();
+  if (now - NET.lastSnapshotAt < NET.snapshotIntervalMs) return;
+  NET.lastSnapshotAt = now;
+  // Build a compact snapshot
+  const ships = [];
+  const allShips = [player, remotePlayer, ...bots].filter(Boolean);
+  for (const s of allShips) {
+    ships.push({
+      id: s.id,
+      n: s.name,
+      x: Math.round(s.x), y: Math.round(s.y),
+      vx: Math.round(s.vx), vy: Math.round(s.vy),
+      sc: s.score,
+      al: s.alive ? 1 : 0,
+      sz: Math.round(s.size),
+      ld: s.lastDir,
+      ws: s.words, // words for showing on remote ships
+      pu: s.activePowerup ? s.activePowerup.key : null,
+      shp: s.shieldHP,
+      ksU: s.killShieldUntil,
+      col: s.color,
+      ip: s.isPlayer ? 1 : 0,
+    });
+  }
+  const snap = {
+    ships,
+    bullets: bullets.map(b => ({ x: Math.round(b.x), y: Math.round(b.y), c: b.color, k: b.isKing ? 1 : 0, ofs: b.offScreenFire ? 1 : 0 })),
+    pickups: pickups.map(p => ({ x: Math.round(p.x), y: Math.round(p.y), k: p.key, exp: p.expiresAt })),
+    shockwaves: shockwaves.map(sw => ({ x: Math.round(sw.x), y: Math.round(sw.y), r: Math.round(sw.radius), mr: sw.maxRadius, lf: sw.life, ml: sw.maxLife, c: sw.color })),
+    level,
+    worldW: WORLD.w, worldH: WORLD.h,
+    kingId: king ? king.id : null,
+    flash, // current screen flash if any
+    t: now,
+  };
+  try {
+    NET.conn.send({ type: 'snapshot', s: snap });
+  } catch (e) {
+    console.warn('snapshot send failed:', e);
+  }
+}
+
+// ============================================================
+// LOBBY WIRING
+// ============================================================
+document.getElementById('btnSinglePlayer').addEventListener('click', () => {
+  NET.mode = 'solo';
+  NET.myName = getMyName();
+  hideLobby();
+  startGame();
+});
+document.getElementById('btnHost').addEventListener('click', startHostingGame);
+document.getElementById('btnJoin').addEventListener('click', showJoinPanel);
+document.getElementById('btnHostBack').addEventListener('click', () => {
+  if (NET.peer) { try { NET.peer.destroy(); } catch (e) {} NET.peer = null; }
+  showLobbyMain();
+});
+document.getElementById('btnJoinBack').addEventListener('click', () => {
+  if (NET.peer) { try { NET.peer.destroy(); } catch (e) {} NET.peer = null; }
+  joinStatus.textContent = '';
+  showLobbyMain();
+});
+document.getElementById('btnJoinConfirm').addEventListener('click', startJoiningGame);
+joinCodeInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') startJoiningGame();
+});
+
+// startGame is the actual transition from lobby to playing.
+let gameStarted = false;
+function startGame() {
+  if (gameStarted) return;
+  gameStarted = true;
+  init();
+  audioInit();
+  audioBootStart();
+  loop();
+}
+
 // ----- Boot -----
 async function boot() {
   loadHighScore();
-  // Show loading overlay
+  // Show loading overlay while we fetch the dictionary
   const loadingEl = document.getElementById('loading');
   if (loadingEl) loadingEl.classList.add('show');
   const result = await loadDictionary();
@@ -2374,13 +3110,8 @@ async function boot() {
     }
     loadingEl.classList.remove('show');
   }
-  init();
-  audioInit();
-  // Start music muted right at game load. First user keypress unmutes it.
-  // This way the toast shows track 1/N immediately instead of waiting for
-  // first interaction, and you hear music the moment you start playing.
-  audioBootStart();
-  loop();
+  // Show the lobby. Game starts when the user picks solo/host/join.
+  showLobby();
 }
 boot();
 </script>
