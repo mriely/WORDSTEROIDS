@@ -1933,6 +1933,9 @@ function drawFromSnapshot() {
 
   try {
     draw();
+    // Run the HUD update inside the swap so the leaderboard sees all the
+    // ships (and updateHUD can read player.score / player.activePowerup etc).
+    updateHUD();
   } finally {
     player = savedPlayer;
     remotePlayer = savedRemote;
@@ -1945,12 +1948,6 @@ function drawFromSnapshot() {
     WORLD.w = savedWorldW;
     WORLD.h = savedWorldH;
     flash = savedFlash;
-  }
-
-  // HUD shows high score (persistent) and current level from snapshot
-  highscoreValueEl.textContent = fmtScore(highScore);
-  if (LEVEL_CONFIG[state.level - 1]) {
-    levelText.textContent = LEVEL_CONFIG[state.level - 1].label;
   }
 }
 
@@ -3238,10 +3235,27 @@ function onHostReceive(msg) {
 // Translate joiner's action into a call on the remotePlayer ship
 function applyRemoteInput(action, dx, dy, shift) {
   if (typeof remotePlayer === 'undefined' || !remotePlayer || !remotePlayer.alive) return;
-  if (action === 'thrust') remotePlayer.thrust(dx, dy);
-  else if (action === 'aim') remotePlayer.aim(dx, dy);
-  else if (action === 'fire') remotePlayer.fire();
-  else if (action === 'brake') remotePlayer.braking = !!dx; // dx=1 means brake on, 0 means off
+  if (action === 'thrust' || action === 'aim') {
+    if (action === 'thrust') remotePlayer.thrust(dx, dy);
+    else remotePlayer.aim(dx, dy);
+    // Refresh the word slot corresponding to the direction the joiner just used.
+    // Direction (dx, dy) maps to the slot: (-1,0)=left, (1,0)=right, (0,-1)=up, (0,1)=down
+    let slot = null;
+    if (dx === -1) slot = 'left';
+    else if (dx === 1) slot = 'right';
+    else if (dy === -1) slot = 'up';
+    else if (dy === 1) slot = 'down';
+    if (slot && remotePlayer.words && remotePlayer.words[slot]) {
+      refreshWordSlot(remotePlayer, remotePlayer.words[slot]);
+    }
+  } else if (action === 'fire') {
+    remotePlayer.fire();
+    if (remotePlayer.words && remotePlayer.words.fire) {
+      refreshWordSlot(remotePlayer, remotePlayer.words.fire);
+    }
+  } else if (action === 'brake') {
+    remotePlayer.braking = !!dx; // dx=1 means brake on, 0 means off
+  }
 }
 
 // ----- Joiner flow -----
