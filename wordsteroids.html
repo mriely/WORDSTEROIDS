@@ -30,7 +30,21 @@
     color: var(--ink);
     font-family: 'VT323', monospace;
     overflow: hidden;
-    cursor: none;
+  }
+
+  /* Fixed virtual resolution. Everything game-related lives inside this stage
+     and is scaled uniformly to fit the actual window. This makes the playable
+     area identical regardless of monitor size or browser zoom — no more
+     "bigger window = see more world" unfairness. */
+  #stage {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 1600px;
+    height: 900px;
+    transform: translate(-50%, -50%) scale(var(--stage-scale, 1));
+    transform-origin: center center;
+    background: var(--bg);
+    overflow: hidden;
   }
 
   #game { position: absolute; inset: 0; display: block; }
@@ -477,21 +491,37 @@
       drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
     animation: goldShimmer 4s ease-in-out infinite;
     padding-left: 0.18em;
+    transition: filter 0.3s, transform 0.3s;
   }
-  /* Tiny twinkling starlets bracketing the score */
+  /* Tiny twinkling starlets bracketing the score — only visible when the
+     player is actively breaking their high score. */
   .highscore .value::before,
   .highscore .value::after {
-    content: '✦';
+    content: '';
     font-family: serif;
-    font-size: 16px;
+    font-size: 18px;
     color: #fff4c2;
     -webkit-text-fill-color: #fff4c2;
     margin: 0 14px;
     vertical-align: middle;
     text-shadow: 0 0 8px #ffd23f, 0 0 16px rgba(255, 200, 70, 0.6);
-    animation: twinkle 2.4s ease-in-out infinite;
+    opacity: 0;
   }
-  .highscore .value::after { animation-delay: 1.2s; }
+  /* "actively beating" state — show stars, faster shimmer, brighter glow */
+  .highscore.beating .value::before,
+  .highscore.beating .value::after {
+    content: '✦';
+    animation: twinkle 1.4s ease-in-out infinite;
+    opacity: 1;
+  }
+  .highscore.beating .value::after { animation-delay: 0.7s; }
+  .highscore.beating .value {
+    animation: goldShimmer 2s ease-in-out infinite;
+    filter:
+      drop-shadow(0 0 22px rgba(255, 235, 130, 0.95))
+      drop-shadow(0 0 40px rgba(255, 200, 70, 0.6))
+      drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+  }
 
   @keyframes goldShimmer {
     0%, 100% { background-position: 50% 0%; }
@@ -515,42 +545,46 @@
 </head>
 <body>
 
-<canvas id="game"></canvas>
+<div id="stage">
+  <canvas id="game"></canvas>
 
-<div class="highscore" id="highscore">
-  <div class="label">SCORE</div>
-  <div class="value" id="highscoreValue">0</div>
-</div>
-
-<div class="hud">
-  <div class="title">Wordsteroids</div>
-  <div class="sub">// prototype build 0.2</div>
-  <div class="stat" id="levelText">LEVEL 1 — LETTERS</div>
-  <div class="powerup" id="powerupBox">
-    <div id="powerupLabel"></div>
-    <div class="bar"><div class="fill" id="powerupFill"></div></div>
+  <div class="highscore" id="highscore">
+    <div class="label">HIGH SCORE</div>
+    <div class="value" id="highscoreValue">0</div>
   </div>
-</div>
 
-<div class="leaderboard" id="leaderboard">
-  <h3>// leaderboard</h3>
-</div>
+  <div class="hud">
+    <div class="title">Wordsteroids</div>
+    <div class="sub">// prototype build 0.2</div>
+    <div class="stat" id="levelText">LEVEL 1 — LETTERS</div>
+    <div class="powerup" id="powerupBox">
+      <div id="powerupLabel"></div>
+      <div class="bar"><div class="fill" id="powerupFill"></div></div>
+    </div>
+  </div>
 
-<div class="banner" id="banner">
-  <div class="big" id="bannerBig">LEVEL 1</div>
-  <div class="small" id="bannerSmall">single letters — type the letter on each side</div>
-</div>
+  <div class="leaderboard" id="leaderboard">
+    <h3>// leaderboard</h3>
+  </div>
 
-<div class="intro" id="intro">
-  <div class="level-tag" id="introLevelTag">LEVEL 1</div>
-  <div class="title" id="introTitle">LETTERS</div>
-  <div class="pw-desc" id="introPwDesc"></div>
-</div>
+  <div class="banner" id="banner">
+    <div class="big" id="bannerBig">LEVEL 1</div>
+    <div class="small" id="bannerSmall">single letters — type the letter on each side</div>
+  </div>
 
-<div class="death" id="death">
-  RUN ENDED
-  <div class="run-stats" id="runStats">score 0 lost</div>
-  <div class="respawn" id="respawnText">new run in 3...</div>
+  <div class="intro" id="intro">
+    <div class="level-tag" id="introLevelTag">LEVEL 1</div>
+    <div class="title" id="introTitle">LETTERS</div>
+    <div class="pw-desc" id="introPwDesc"></div>
+  </div>
+
+  <div class="death" id="death">
+    RUN ENDED
+    <div class="run-stats" id="runStats">score 0 lost</div>
+    <div class="respawn" id="respawnText">new run in 3...</div>
+  </div>
+
+  <div class="netstatus" id="netstatus"></div>
 </div>
 
 <div class="loading" id="loading">
@@ -593,8 +627,6 @@
   </div>
 </div>
 
-<div class="netstatus" id="netstatus"></div>
-
 <div class="vignette"></div>
 <div class="scanlines"></div>
 
@@ -605,11 +637,19 @@
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
-let W = window.innerWidth;
-let H = window.innerHeight;
+// Fixed virtual resolution. Everything in the game's coordinate space is
+// rendered into this canvas size; CSS scales the result to fit the window.
+const W = 1600;
+const H = 900;
+canvas.width = W;
+canvas.height = H;
+
 function resize() {
-  W = window.innerWidth; H = window.innerHeight;
-  canvas.width = W; canvas.height = H;
+  // Compute scale to fit the actual viewport while preserving aspect ratio
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const scale = Math.min(vw / W, vh / H);
+  document.documentElement.style.setProperty('--stage-scale', scale);
 }
 window.addEventListener('resize', resize);
 resize();
@@ -637,7 +677,7 @@ const POWERUP_DEFS = {
   },
   boost: {
     name: 'BOOST', color: '#5aff7c', tier: 1,
-    desc: 'thrust 2× stronger, less drift.',
+    desc: 'each thrust pushes you 2× harder.',
     duration: 20,
     type: 'passive',
   },
@@ -1060,6 +1100,7 @@ class Ship {
     this.flashAt = 0;
     this.thrustAt = 0;
     this.actionPulseAt = 0; // brief inner-square pulse on any successful action
+    this.braking = false; // when true, ship rapidly decelerates (spacebar for player, AI for bots)
     // Powerup state
     this.activePowerup = null; // { key, expiresAt }
     this.shieldHP = 0; // shield consumes a hit
@@ -1080,6 +1121,9 @@ class Ship {
       const def = POWERUP_DEFS[this.activePowerup.key];
       if (def.type === 'weapon') return def.color;
     }
+    // Stealth ships have near-black hulls but their bullets are visible (a dim purple-red),
+    // since invisible bullets would be unfair.
+    if (this.stealth) return '#9a8aa0';
     return this.color === '#00ffe0' ? '#ff2d6f' : this.color; // player's default weapon = pink
   }
 
@@ -1121,14 +1165,16 @@ class Ship {
     this.alive = false;
     this.respawnAt = performance.now() + 3000;
     if (byShip) {
-      byShip.score += 1;
+      // Regicide bounty: killing the king is worth 5 points instead of 1.
+      const wasKing = king && king.id === this.id;
+      byShip.score += wasKing ? 5 : 1;
       // Kill-reward shield. VAMPIRE makes it longer + resets fire cooldown.
       const isVampire = byShip.activePowerup && byShip.activePowerup.key === 'vampire';
       const shieldMs = isVampire ? 5000 : 3000;
       byShip.killShieldUntil = performance.now() + shieldMs;
       if (isVampire) byShip.fireCooldown = 0; // chain kills
     }
-    spawnExplosion(this.x, this.y, this.color, 24);
+    spawnExplosion(this.x, this.y, this.stealth ? '#888' : this.color, 24);
     const lostScore = this.score;
     const lostLevel = level;
     if (this.isPlayer) showDeath(lostScore, lostLevel);
@@ -1142,11 +1188,16 @@ class Ship {
     // Roguelike: dying wipes your run. Score resets to 0 for everyone.
     // Player death also resets the world level back to 1.
     this.score = 0;
-    if (this.isPlayer && level > 1) {
-      level = 1;
-      applyWorldSizeForLevel(); // shrink world back to base
-      // Refresh every ship's words to the new (easier) pool
-      for (const s of [player, ...bots]) s.resetWords();
+    if (this.isPlayer) {
+      // Update the "what to beat" baseline so the active-beating stars only
+      // light up once this new run surpasses our session's best so far.
+      priorHighScore = highScore;
+      if (level > 1) {
+        level = 1;
+        applyWorldSizeForLevel(); // shrink world back to base
+        // Refresh every ship's words to the new (easier) pool
+        for (const s of [player, ...bots]) s.resetWords();
+      }
     }
   }
 
@@ -1157,6 +1208,7 @@ class Ship {
     this.vx = (Math.random() - 0.5) * 60;
     this.vy = (Math.random() - 0.5) * 60;
     this.size = this.baseSize; // shrink back to small
+    this.braking = false; // start fresh, not braking
     // 3-second spawn invulnerability so you don't get instakilled appearing
     this.killShieldUntil = performance.now() + 3000;
     this.resetWords();
@@ -1165,10 +1217,15 @@ class Ship {
 
   thrust(dx, dy) {
     const boosted = this.activePowerup && this.activePowerup.key === 'boost';
+    // BOOST doubles the per-thrust impulse (110 → 220) so you accelerate faster,
+    // but the safety speed ceiling is the same for everyone.
     const speed = boosted ? 220 : 110;
     this.vx += dx * speed;
     this.vy += dy * speed;
-    const cap = boosted ? 420 : 280;
+    // High safety ceiling: only here to prevent ships from teleporting through
+    // each other (collision check would miss if movement-per-frame > ship size).
+    // At 60fps, 1800 px/s = 30 px/frame, well under typical ship size of ~50px.
+    const cap = 1800;
     const m = Math.hypot(this.vx, this.vy);
     if (m > cap) { this.vx = this.vx / m * cap; this.vy = this.vy / m * cap; }
     this.lastDir = { x: dx, y: dy };
@@ -1314,11 +1371,17 @@ class Ship {
       this.shieldHP = 0;
     }
 
-    // friction (less when boosted — feels punchier)
-    const boosted = this.activePowerup && this.activePowerup.key === 'boost';
-    const friction = boosted ? 0.998 : 0.992;
-    this.vx *= friction;
-    this.vy *= friction;
+    // Space physics: NO default friction. Velocity persists unless braked.
+    // Player brakes by holding spacebar. Bots may decide to brake via their AI.
+    if (this.braking) {
+      // Strong but not instant brake — a smooth slowdown
+      const brake = 0.90;
+      this.vx *= brake;
+      this.vy *= brake;
+      // Snap to zero when very slow so we don't drift forever at tiny velocities
+      if (Math.abs(this.vx) < 1) this.vx = 0;
+      if (Math.abs(this.vy) < 1) this.vy = 0;
+    }
     this.x += this.vx * dt;
     this.y += this.vy * dt;
     if (this.x < 0) this.x += WORLD.w;
@@ -1353,22 +1416,34 @@ class Ship {
 
     // Bot AI — difficulty scales with level
     if (!this.isPlayer) {
+      const isSpeedy = this.botType === 'speedy';
+      // Auto-brake when bot speed exceeds a threshold. Bots can't hold a key,
+      // so this gives them a poor-man's deceleration: when going too fast, they
+      // brake until they're under control again.
+      // Threshold scales with level: bots are slow at L1, faster at high levels.
+      // SPEEDY never brakes — it just accumulates velocity. Wheeeee.
+      if (!isSpeedy) {
+        const speedSq = this.vx * this.vx + this.vy * this.vy;
+        const BRAKE_THRESHOLD = Math.min(900, 150 + (level - 1) * 40); // L1=150, L10=510, L20=900 cap
+        if (speedSq > BRAKE_THRESHOLD * BRAKE_THRESHOLD) {
+          this.braking = true;
+        } else if (speedSq < (BRAKE_THRESHOLD * 0.5) * (BRAKE_THRESHOLD * 0.5)) {
+          this.braking = false;
+        }
+      } else {
+        this.braking = false;
+      }
+
       this.botCooldown -= dt;
       if (this.botCooldown <= 0) {
-        // Difficulty curve scales smoothly with level number.
-        // Bots are aggressive even at L1 and ramp toward brutal at higher levels.
         const lvl = level;
-        const t = 1 - Math.pow(0.80, Math.max(0, lvl - 1)); // 0 at L1, ~0.6 at L5, ~0.9 at L10, ~0.99 at L20
-        // Action timing — short intervals throughout, bottoms out at ~0.35s
-        const minInterval = Math.max(0.35, 1.8 - t * 1.5);  // 1.8s → ~0.35s
-        const intervalRange = Math.max(0.5, 1.4 - t * 0.95); // 1.4s → ~0.5s
+        const t = 1 - Math.pow(0.80, Math.max(0, lvl - 1));
+        const minInterval = Math.max(0.35, 1.8 - t * 1.5);
+        const intervalRange = Math.max(0.5, 1.4 - t * 0.95);
         const actionInterval = minInterval + Math.random() * intervalRange;
-        // Aim accuracy starts engaged (45%) and climbs toward near-perfect
-        const aimChance = 0.45 + t * 0.53;          // 0.45 → ~0.98
-        // Fire chance: 40% at L1 means ~10 shots/min per bot at start, rising to ~57% at high levels
-        const fireChance = 0.40 + t * 0.20;         // 0.40 → ~0.60
-        // Leader-hunting bias: starts mild, climbs with level
-        const leaderBias = Math.min(0.85, t * 0.95); // 0 → ~0.85
+        const aimChance = 0.45 + t * 0.53;
+        const fireChance = 0.40 + t * 0.20;
+        const leaderBias = Math.min(0.85, t * 0.95);
         this.botCooldown = actionInterval;
 
         if (Math.random() < fireChance) {
@@ -1377,12 +1452,26 @@ class Ship {
         } else {
           let target = null;
           if (Math.random() < aimChance) target = pickHostileTarget(this, leaderBias);
+          // Build the allowed cardinal directions. SPEEDY excludes the direction
+          // opposite its current dominant motion — it never wants to slow itself
+          // down. Other bots have all 4 directions available.
+          let cardinals = [[1,0],[-1,0],[0,1],[0,-1]];
+          if (isSpeedy) {
+            // Determine dominant motion axis and forbid its reverse
+            const speedSq2 = this.vx * this.vx + this.vy * this.vy;
+            if (speedSq2 > 30 * 30) { // only filter if moving meaningfully
+              const ax = Math.abs(this.vx), ay = Math.abs(this.vy);
+              let forbiddenX = 0, forbiddenY = 0;
+              if (ax >= ay) forbiddenX = this.vx > 0 ? -1 : 1; // moving east → forbid west, etc.
+              else          forbiddenY = this.vy > 0 ? -1 : 1;
+              cardinals = cardinals.filter(c => !(c[0] === forbiddenX && c[1] === forbiddenY));
+            }
+          }
           let dx, dy;
           if (target) {
             const tdx = wrapDelta(this.x, target.x, WORLD.w);
             const tdy = wrapDelta(this.y, target.y, WORLD.h);
             const ang = Math.atan2(tdy, tdx);
-            const cardinals = [[1,0],[-1,0],[0,1],[0,-1]];
             cardinals.sort((a,b) => {
               const da = Math.acos(Math.max(-1, Math.min(1, a[0]*Math.cos(ang) + a[1]*Math.sin(ang))));
               const db = Math.acos(Math.max(-1, Math.min(1, b[0]*Math.cos(ang) + b[1]*Math.sin(ang))));
@@ -1390,7 +1479,7 @@ class Ship {
             });
             [dx, dy] = cardinals[0];
           } else {
-            [dx, dy] = randFrom([[1,0],[-1,0],[0,1],[0,-1]]);
+            [dx, dy] = randFrom(cardinals);
           }
           this.thrust(dx, dy);
           this.resetWords();
@@ -1528,25 +1617,31 @@ function init() {
     remotePlayer.isRemote = true; // tag so we skip local input handling
   }
 
-  // Solo: original palette. Host: the joiner takes hot pink (#ff2d6f),
-  // so BLACKBYTE shifts to a different color in host mode.
-  let botColors, botNames;
+  // Color palette. BLACKBYTE is a stealth ship — near-black so it's hard to
+  // spot against the dark background. The render code special-cases its border.
+  const BLACKBYTE_COLOR = '#0d0d12';
+  let botColors, botNames, botTypes;
   if (NET.mode === 'host') {
-    // Host: 6 bots, joiner is the hot-pink player. BLACKBYTE goes magenta.
-    botColors = ['#ff66c4','#a06bff','#1ec8ff','#7cff5a','#ff8c42','#9aa8ff'];
-    botNames  = ['BLACKBYTE','CUTLASS','KRAKEN','SCURVY','NULLBEARD','VESPER'];
+    // Host: 6 bots, joiner is the hot-pink player.
+    botColors = [BLACKBYTE_COLOR, '#e040fb','#1ec8ff','#7cff5a','#ff8c42','#9aa8ff'];
+    botNames  = ['BLACKBYTE','SPEEDY','KRAKEN','SCURVY','NULLBEARD','VESPER'];
+    botTypes  = ['normal','speedy','normal','normal','normal','normal'];
   } else {
-    // Solo: 5 bots, exactly as it was before multiplayer.
-    botColors = ['#ff2d6f','#a06bff','#1ec8ff','#7cff5a','#ff8c42'];
-    botNames  = ['BLACKBYTE','CUTLASS','KRAKEN','SCURVY','NULLBEARD'];
+    // Solo: 5 bots.
+    botColors = [BLACKBYTE_COLOR, '#e040fb','#1ec8ff','#7cff5a','#ff8c42'];
+    botNames  = ['BLACKBYTE','SPEEDY','KRAKEN','SCURVY','NULLBEARD'];
+    botTypes  = ['normal','speedy','normal','normal','normal'];
   }
   for (let i = 0; i < botColors.length; i++) {
-    bots.push(new Ship({
+    const ship = new Ship({
       id: 'b' + i, name: botNames[i],
       x: Math.random() * WORLD.w,
       y: Math.random() * WORLD.h,
       color: botColors[i],
-    }));
+    });
+    ship.botType = botTypes[i];
+    ship.stealth = (botNames[i] === 'BLACKBYTE'); // render with faint outline
+    bots.push(ship);
   }
   showLevelIntro();
 }
@@ -1607,6 +1702,18 @@ window.addEventListener('keydown', (e) => {
     }
     return;
   }
+  // Spacebar = brake. Holding it rapidly decelerates the ship.
+  // (Default browser behavior would scroll the page; preventDefault stops that.)
+  if (e.key === ' ' || e.code === 'Space') {
+    e.preventDefault();
+    if (NET.mode === 'joiner') {
+      sendInput('brake', 1, 0, false);
+    } else if (player.alive) {
+      player.braking = true;
+    }
+    return;
+  }
+
   if (!player.alive) return;
   if (e.key.length === 1 && /[a-zA-Z]/.test(e.key)) {
     typedBuffer += e.key.toLowerCase();
@@ -1615,6 +1722,17 @@ window.addEventListener('keydown', (e) => {
     typedBuffer = typedBuffer.slice(0, -1);
   } else if (e.key === 'Escape') {
     typedBuffer = '';
+  }
+});
+
+// Spacebar release: stop braking
+window.addEventListener('keyup', (e) => {
+  if (e.key === ' ' || e.code === 'Space') {
+    if (NET.mode === 'joiner') {
+      sendInput('brake', 0, 0, false);
+    } else if (player) {
+      player.braking = false;
+    }
   }
 });
 
@@ -1829,8 +1947,8 @@ function drawFromSnapshot() {
     flash = savedFlash;
   }
 
-  // Update HUD using the joiner's score from snapshot
-  highscoreValueEl.textContent = fmtScore(meStub.score);
+  // HUD shows high score (persistent) and current level from snapshot
+  highscoreValueEl.textContent = fmtScore(highScore);
   if (LEVEL_CONFIG[state.level - 1]) {
     levelText.textContent = LEVEL_CONFIG[state.level - 1].label;
   }
@@ -1952,11 +2070,11 @@ function loop() {
       pickupTimer = 0;
     }
 
-    // KOTH
+    // KOTH — king accumulates 0.1 every 3 seconds (slow passive bonus)
     updateKing(dt);
     if (king) {
       kingTimer += dt;
-      if (kingTimer >= 1) { kingTimer = 0; king.score = Math.round((king.score + 0.1) * 10) / 10; }
+      if (kingTimer >= 3) { kingTimer = 0; king.score = Math.round((king.score + 0.1) * 10) / 10; }
     }
 
     // High score check (covers kills, KOTH ticks, and any other score change)
@@ -2320,21 +2438,26 @@ function drawShip(s, cam) {
     }
   }
 
-  // Neon border. King's border BLINKS dramatically — pulsing brightness + glow.
+  // Neon border. King's border BLINKS (alpha pulse) but with no glow halo,
+  // so it doesn't get confused with a defensive shield effect.
+  // Stealth ships get a very faint dim outline — barely visible against space.
   if (isKingShip) {
     const t = performance.now() / 400;
     const blink = 0.55 + Math.sin(t) * 0.45; // 0.10 → 1.00 alpha
-    const glow = 14 + Math.sin(t) * 12;     // 2 → 26 blur
-    ctx.shadowColor = '#ffd23f';
-    ctx.shadowBlur = glow;
+    ctx.shadowBlur = 0;
     ctx.strokeStyle = `rgba(255, 210, 63, ${blink})`;
     ctx.lineWidth = 3;
     ctx.strokeRect(sx - half, sy - half, size, size);
     // Inner companion stroke for that "second skin" gold thickness
-    ctx.shadowBlur = 0;
     ctx.strokeStyle = `rgba(255, 244, 194, ${blink * 0.7})`;
     ctx.lineWidth = 1;
     ctx.strokeRect(sx - half + 3, sy - half + 3, size - 6, size - 6);
+  } else if (s.stealth) {
+    // Stealth: only a very faint outline, no glow at all. Hard to spot.
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(180, 180, 195, 0.35)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(sx - half, sy - half, size, size);
   } else {
     ctx.shadowColor = s.color;
     ctx.shadowBlur = 10;
@@ -2587,6 +2710,17 @@ function drawMinimap() {
     ctx.fillRect(dx - 0.5, dy - 0.5, 1, 1);
   }
 
+  // bullets — tiny dots, only for projectiles fired by the local player so
+  // you can track where your shots are going on the minimap.
+  for (const b of bullets) {
+    if (!b.owner || b.owner !== player) continue;
+    const bx = x + b.x * sx;
+    const by = y + b.y * sy;
+    if (bx < x || bx > x + mw || by < y || by > y + mh) continue;
+    ctx.fillStyle = b.color;
+    ctx.fillRect(bx - 1, by - 1, 2, 2);
+  }
+
   // ships
   for (const s of [...bots, player]) {
     if (!s.alive) continue;
@@ -2630,9 +2764,13 @@ const powerupFill = document.getElementById('powerupFill');
 
 function updateHUD() {
   levelText.textContent = LEVEL_CONFIG[level - 1].label;
-  // Top-center shows the player's live score (high score still tracked in
-  // storage and surfaced on death-overlay if it gets beaten).
-  highscoreValueEl.textContent = fmtScore(player.score);
+  // Top-center shows the persistent HIGH SCORE.
+  highscoreValueEl.textContent = fmtScore(highScore);
+  // When the player is actively surpassing their prior best, the high-score
+  // banner lights up with extra shine. (priorHighScore is captured at game
+  // start / after death.)
+  const beating = player && player.alive && player.score > priorHighScore && priorHighScore > 0;
+  highscoreEl.classList.toggle('beating', beating);
 
   // powerup box
   if (player.activePowerup) {
@@ -2667,7 +2805,11 @@ function updateHUD() {
     const crown = (king && king.id === s.id) ? '👑 ' : '';
     // king/you classes win via CSS color; bots get their ship color inline
     const isKingOrYou = cls.includes('king') || cls.includes('you');
-    const styleAttr = isKingOrYou ? '' : ` style="color:${s.color}; text-shadow: 0 0 6px ${s.color}80"`;
+    // Stealth ships render in dim gray so the name is still legible on the
+    // leaderboard (their actual ship color would be unreadable text on dark UI).
+    let textColor = s.color;
+    if (s.stealth) textColor = '#aab';
+    const styleAttr = isKingOrYou ? '' : ` style="color:${textColor}; text-shadow: 0 0 6px ${textColor}80"`;
     html += `<div class="row ${cls.join(' ')}"${styleAttr}>${crown}${s.name} · ${fmtScore(s.score)}</div>`;
   }
   leaderboardEl.innerHTML = html;
@@ -2753,6 +2895,7 @@ function hideDeath() {
 // ----- High Score (persisted) -----
 const HIGHSCORE_KEY = 'wordsteroids:highscore';
 let highScore = 0;
+let priorHighScore = 0; // captured at game start / after death — basis for "actively beating it"
 const highscoreEl = document.getElementById('highscore');
 const highscoreValueEl = document.getElementById('highscoreValue');
 
@@ -2767,6 +2910,7 @@ async function loadHighScore() {
   } catch (e) {
     // Key doesn't exist yet, or storage unavailable — start at 0
   }
+  priorHighScore = highScore;
 }
 
 async function saveHighScore() {
@@ -2912,7 +3056,8 @@ function showAudioToast(msg) {
       border: 1px solid rgba(0,255,224,0.3);
       pointer-events: none; opacity: 0; transition: opacity 0.3s;
     `;
-    document.body.appendChild(el);
+    // Append inside stage so it scales with the game
+    (document.getElementById('stage') || document.body).appendChild(el);
   }
   el.textContent = msg;
   el.style.opacity = '1';
@@ -3096,6 +3241,7 @@ function applyRemoteInput(action, dx, dy, shift) {
   if (action === 'thrust') remotePlayer.thrust(dx, dy);
   else if (action === 'aim') remotePlayer.aim(dx, dy);
   else if (action === 'fire') remotePlayer.fire();
+  else if (action === 'brake') remotePlayer.braking = !!dx; // dx=1 means brake on, 0 means off
 }
 
 // ----- Joiner flow -----
