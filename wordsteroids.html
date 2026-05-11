@@ -103,11 +103,26 @@
     text-transform: uppercase;
     letter-spacing: 0.12em;
   }
-  .leaderboard h3 { color: var(--dim); font-size: 14px; margin-bottom: 6px; }
+  .leaderboard h3 { color: var(--dim); font-size: 14px; margin-bottom: 6px; margin-top: 12px; }
   .leaderboard .row { color: var(--ink); }
   .leaderboard .row.king { color: var(--neon-3); text-shadow: 0 0 8px rgba(255,210,63,0.6); }
   .leaderboard .row.you { color: var(--neon-2); }
   .leaderboard .row.dead { color: var(--dim); text-decoration: line-through; }
+  .leaderboard .high-row {
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 210, 63, 0.18);
+  }
+  .leaderboard .high-label {
+    color: rgba(255, 220, 130, 0.55);
+    font-size: 12px;
+    letter-spacing: 0.2em;
+    margin-right: 8px;
+  }
+  .leaderboard .high-value {
+    color: #ffd23f;
+    font-size: 18px;
+    text-shadow: 0 0 6px rgba(255, 200, 70, 0.5);
+  }
 
   /* Banner (short level title) */
   .banner {
@@ -549,7 +564,7 @@
   <canvas id="game"></canvas>
 
   <div class="highscore" id="highscore">
-    <div class="label">HIGH SCORE</div>
+    <div class="label">SCORE</div>
     <div class="value" id="highscoreValue">0</div>
   </div>
 
@@ -564,6 +579,10 @@
   </div>
 
   <div class="leaderboard" id="leaderboard">
+    <div class="high-row">
+      <span class="high-label">// all-time high</span>
+      <span class="high-value" id="leaderHighScore">0</span>
+    </div>
     <h3>// leaderboard</h3>
   </div>
 
@@ -619,7 +638,7 @@
     </div>
 
     <div id="lobbyJoin" style="display:none">
-      <input type="text" class="lobby-input" id="joinCode" maxlength="20" placeholder="ENTER CODE" />
+      <input type="text" class="lobby-input" id="joinCode" maxlength="4" placeholder="4-CHAR CODE" />
       <button class="lobby-btn secondary" id="btnJoinConfirm">CONNECT</button>
       <div class="lobby-status" id="joinStatus"></div>
       <button class="lobby-btn tertiary" id="btnJoinBack">BACK</button>
@@ -1094,7 +1113,8 @@ class Ship {
     this.baseSize = 36;
     this.maxSize = 90;
     this.size = this.baseSize;
-    this.words = pickShipWords(level);
+    this.level = 1; // personal level — each ship advances independently based on its own score
+    this.words = pickShipWords(this.level);
     this.botCooldown = 0.5 + Math.random() * 1.5; // initial idle so bots don't all fire at boot
     this.fireCooldown = 0;
     this.flashAt = 0;
@@ -1110,7 +1130,7 @@ class Ship {
 
   isKing() { return king && king.id === this.id; }
   resetWords() {
-    this.words = pickShipWords(level);
+    this.words = pickShipWords(this.level);
     if (this.isPlayer) typedBuffer = '';
   }
 
@@ -1176,7 +1196,7 @@ class Ship {
     }
     spawnExplosion(this.x, this.y, this.stealth ? '#888' : this.color, 24);
     const lostScore = this.score;
-    const lostLevel = level;
+    const lostLevel = this.level;
     if (this.isPlayer) showDeath(lostScore, lostLevel);
     if (king && king.id === this.id) king = null;
     // Drop active powerup as a pickup at death location, if any
@@ -1185,20 +1205,17 @@ class Ship {
     }
     this.activePowerup = null;
     this.shieldHP = 0;
-    // Roguelike: dying wipes your run. Score resets to 0 for everyone.
-    // Player death also resets the world level back to 1.
+    // Roguelike: dying wipes your run. Score AND personal level reset.
     this.score = 0;
+    this.level = 1;
+    this.resetWords(); // pull fresh level-1 words
     if (this.isPlayer) {
       // Update the "what to beat" baseline so the active-beating stars only
       // light up once this new run surpasses our session's best so far.
       priorHighScore = highScore;
-      if (level > 1) {
-        level = 1;
-        applyWorldSizeForLevel(); // shrink world back to base
-        // Refresh every ship's words to the new (easier) pool
-        for (const s of [player, ...bots]) s.resetWords();
-      }
     }
+    // Recompute world size in case the highest-level human changed
+    applyWorldSizeForLevel();
   }
 
   respawn() {
@@ -1268,21 +1285,19 @@ class Ship {
         color: baseColor,
         isKing,
         hits: new Set(),
-        offScreenFire: !isOnPlayerScreen(this.x, this.y),
+        fx: this.x, fy: this.y, // fire origin for per-viewer visibility check
         isNuke: true,            // marks it for the special render & explode logic
         nukeRadius: 14,           // big visual size
         nukeBlastRadius: 280,     // smaller than the old 9999 screen-clearer
       };
       bullets.push(nukeBullet);
-      // Off-screen muzzle flash so the player sees something was launched
-      if (!isOnPlayerScreen(this.x, this.y)) {
-        shockwaves.push({
-          x: this.x, y: this.y,
-          radius: 0, maxRadius: 80,
-          life: 0.4, maxLife: 0.4,
-          color: baseColor,
-        });
-      }
+      // Muzzle flash at launch site — visible per-viewer via viewport clip
+      shockwaves.push({
+        x: this.x, y: this.y,
+        radius: 0, maxRadius: 80,
+        life: 0.4, maxLife: 0.4,
+        color: baseColor,
+      });
       return;
     }
 
@@ -1321,9 +1336,8 @@ class Ship {
         color: baseColor,
         isKing,
         hits: new Set(),
-        // Was the owner off-screen at fire time? If so, this bullet is invisible
-        // to the player and can't hit them. (Owner-on-screen at fire = always visible/dangerous.)
-        offScreenFire: !isOnPlayerScreen(owner.x, owner.y),
+        // Fire origin — used by each client to decide visibility on its own viewport.
+        fx: owner.x, fy: owner.y,
       };
     }
 
@@ -1341,17 +1355,16 @@ class Ship {
       bullets.push(makeBullet(dirAngle, this));
     }
 
-    // Muzzle-flash hint: if the shooter is off-screen, spawn a small harmless
-    // shockwave at their location so the player sees where shots came from
-    // (the bullets themselves stay invisible).
-    if (!isOnPlayerScreen(this.x, this.y)) {
-      shockwaves.push({
-        x: this.x, y: this.y,
-        radius: 0, maxRadius: 60,
-        life: 0.3, maxLife: 0.3,
-        color: baseColor,
-      });
-    }
+    // Muzzle-flash hint at the firing location. Always spawned; each viewer's
+    // viewport clip determines whether they actually see it on screen. This
+    // ensures multiplayer viewers get a visual cue when the shooter is off
+    // their viewport even if they're on the other player's viewport.
+    shockwaves.push({
+      x: this.x, y: this.y,
+      radius: 0, maxRadius: 60,
+      life: 0.3, maxLife: 0.3,
+      color: baseColor,
+    });
   }
 
   update(dt) {
@@ -1398,7 +1411,7 @@ class Ship {
       if (Math.abs(dx) < this.size/2 + 16 && Math.abs(dy) < this.size/2 + 16) {
         const def = POWERUP_DEFS[p.key];
         const need = def.tier;
-        if (level >= need) {
+        if (this.level >= need) {
           this.applyPowerup(p.key);
           // Remember where it was collected so the next spawn can be far away
           lastPickupLocation = { x: p.x, y: p.y };
@@ -1424,7 +1437,7 @@ class Ship {
       // SPEEDY never brakes — it just accumulates velocity. Wheeeee.
       if (!isSpeedy) {
         const speedSq = this.vx * this.vx + this.vy * this.vy;
-        const BRAKE_THRESHOLD = Math.min(900, 150 + (level - 1) * 40); // L1=150, L10=510, L20=900 cap
+        const BRAKE_THRESHOLD = Math.min(900, 150 + (this.level - 1) * 40); // L1=150, L10=510, L20=900 cap
         if (speedSq > BRAKE_THRESHOLD * BRAKE_THRESHOLD) {
           this.braking = true;
         } else if (speedSq < (BRAKE_THRESHOLD * 0.5) * (BRAKE_THRESHOLD * 0.5)) {
@@ -1436,14 +1449,18 @@ class Ship {
 
       this.botCooldown -= dt;
       if (this.botCooldown <= 0) {
-        const lvl = level;
+        const lvl = this.level;
         const t = 1 - Math.pow(0.80, Math.max(0, lvl - 1));
         const minInterval = Math.max(0.35, 1.8 - t * 1.5);
         const intervalRange = Math.max(0.5, 1.4 - t * 0.95);
         const actionInterval = minInterval + Math.random() * intervalRange;
-        const aimChance = 0.45 + t * 0.53;
+        const aimChance = 0.65 + t * 0.33; // 0.65 → 0.98
         const fireChance = 0.40 + t * 0.20;
-        const leaderBias = Math.min(0.85, t * 0.95);
+        // Leader-bias uses the GLOBAL level (heat of the match) so even
+        // fresh-respawned level-1 bots will hunt the leader. Combined with
+        // a minimum floor so bots always have SOME tendency to target.
+        const globalT = 1 - Math.pow(0.80, Math.max(0, level - 1));
+        const leaderBias = Math.max(0.35, Math.min(0.85, globalT * 0.95));
         this.botCooldown = actionInterval;
 
         if (Math.random() < fireChance) {
@@ -1737,11 +1754,11 @@ window.addEventListener('keyup', (e) => {
 });
 
 function cheatWarpToLevel(targetLevel) {
-  if (!LEVEL_CONFIG.length) return;
+  if (!LEVEL_CONFIG.length || !player) return;
   const clamped = Math.max(1, Math.min(LEVEL_CONFIG.length, targetLevel));
-  level = clamped;
+  player.level = clamped;
+  player.resetWords();
   applyWorldSizeForLevel();
-  for (const s of [player, ...bots]) s.resetWords();
   showLevelIntro();
 }
 
@@ -1854,6 +1871,7 @@ function drawFromSnapshot() {
     words: sh.ws || { up: '', down: '', left: '', right: '', fire: '' },
     color: sh.col,
     isPlayer: !!sh.ip,
+    level: sh.lv || 1,
     activePowerup: sh.pu ? { key: sh.pu, expiresAt: performance.now() + 20000 } : null,
     shieldHP: sh.shp || 0,
     killShieldUntil: sh.ksU || 0,
@@ -1892,7 +1910,7 @@ function drawFromSnapshot() {
 
   // Bullets: preserve isNuke/nukeRadius for proper rendering
   const stubBullets = state.bullets.map(b => ({
-    x: b.x, y: b.y, color: b.c, isKing: !!b.k, offScreenFire: !!b.ofs,
+    x: b.x, y: b.y, color: b.c, isKing: !!b.k, fx: b.fx, fy: b.fy,
     isNuke: !!b.nk, nukeRadius: b.nr || 0,
   }));
   const stubPickups = state.pickups.map(p => ({
@@ -1929,7 +1947,13 @@ function drawFromSnapshot() {
   level = state.level;
   WORLD.w = state.worldW;
   WORLD.h = state.worldH;
-  flash = state.flash || null;
+  // Flash: snapshot carries a remaining-ms field. Rebuild flash.until on the
+  // joiner's local clock so it expires correctly here.
+  if (state.flash && state.flash.ms > 0) {
+    flash = { color: state.flash.color, until: performance.now() + state.flash.ms };
+  } else {
+    flash = null;
+  }
 
   try {
     draw();
@@ -1987,7 +2011,6 @@ function loop() {
       for (const s of allShips) {
         if (!s.alive || s === b.owner) continue;
         if (b.hits && b.hits.has(s.id)) continue;
-        if (b.offScreenFire && s.isPlayer) continue;
         const dx = wrapDelta(b.x, s.x, WORLD.w);
         const dy = wrapDelta(b.y, s.y, WORLD.h);
         const hh = s.hitHalf();
@@ -2077,14 +2100,28 @@ function loop() {
     // High score check (covers kills, KOTH ticks, and any other score change)
     maybeUpdateHighScore();
 
-    // Level progression: ANY human player crossing the threshold advances.
-    // (Bots don't trigger level-ups — only real players do.)
-    const cfg = LEVEL_CONFIG[level - 1];
-    const humans = [player, remotePlayer].filter(s => s);
-    const anyHumanReady = humans.some(s => s.score >= cfg.scoreToAdvance);
-    if (anyHumanReady && level < LEVEL_CONFIG.length) {
-      level++;
-      onLevelUp();
+    // Per-ship level progression: each ship advances when their own score
+    // crosses their own personal level's threshold.
+    const allShips = remotePlayer ? [player, remotePlayer, ...bots] : [player, ...bots];
+    let topHumanLevelChanged = false;
+    for (const s of allShips) {
+      if (!s.alive) continue;
+      while (s.level < LEVEL_CONFIG.length) {
+        const cfg = LEVEL_CONFIG[s.level - 1];
+        if (s.score >= cfg.scoreToAdvance) {
+          s.level++;
+          s.resetWords(); // new word length
+          // If this was a human player who is now setting a new top-level,
+          // recompute world size + show banner
+          if (s.isPlayer) {
+            if (s.level > level) topHumanLevelChanged = true;
+            if (s === player) showLevelIntro(); // local player's level-up gets banner
+          }
+        } else break;
+      }
+    }
+    if (topHumanLevelChanged) {
+      applyWorldSizeForLevel();
     }
   }
 
@@ -2108,6 +2145,11 @@ function updateKing(dt) {
 }
 
 function applyWorldSizeForLevel() {
+  // World grows with the highest human player's personal level
+  const humans = remotePlayer ? [player, remotePlayer] : [player];
+  let topLevel = 1;
+  for (const h of humans) if (h && h.level > topLevel) topLevel = h.level;
+  level = topLevel; // keep the global `level` mirror in sync (used as a fallback in some places)
   const scale = 1 + WORLD_GROWTH_PER_LEVEL * (level - 1);
   WORLD.w = Math.round(BASE_WORLD.w * scale);
   WORLD.h = Math.round(BASE_WORLD.h * scale);
@@ -2286,8 +2328,9 @@ function draw() {
 
   // bullets
   for (const b of bullets) {
-    // Bullets fired from outside the player's viewport stay invisible
-    if (b.offScreenFire) continue;
+    // Per-viewer visibility: skip bullets whose fire origin was outside
+    // the local viewport. Each client checks against its own camera/player.
+    if (b.fx !== undefined && b.fy !== undefined && !isOnPlayerScreen(b.fx, b.fy)) continue;
     const sxw = wrapDelta(cam.x + W/2, b.x, WORLD.w);
     const syw = wrapDelta(cam.y + H/2, b.y, WORLD.h);
     const sx = W/2 + sxw;
@@ -2758,16 +2801,22 @@ const leaderboardEl = document.getElementById('leaderboard');
 const powerupBox = document.getElementById('powerupBox');
 const powerupLabel = document.getElementById('powerupLabel');
 const powerupFill = document.getElementById('powerupFill');
+const leaderHighScoreEl = document.getElementById('leaderHighScore');
 
 function updateHUD() {
-  levelText.textContent = LEVEL_CONFIG[level - 1].label;
-  // Top-center shows the persistent HIGH SCORE.
-  highscoreValueEl.textContent = fmtScore(highScore);
-  // When the player is actively surpassing their prior best, the high-score
-  // banner lights up with extra shine. (priorHighScore is captured at game
-  // start / after death.)
-  const beating = player && player.alive && player.score > priorHighScore && priorHighScore > 0;
+  // Show the local player's personal level (each ship has its own level)
+  const myLevel = (player && player.level) || 1;
+  const cfg = LEVEL_CONFIG[Math.min(myLevel, LEVEL_CONFIG.length) - 1];
+  levelText.textContent = cfg.label;
+  // Top-center shows the player's LIVE score.
+  const myScore = (player && player.score) || 0;
+  highscoreValueEl.textContent = fmtScore(myScore);
+  // Glow effect when the live score is at-or-above the prior best — meaning
+  // the player is currently sitting on a new high score.
+  const beating = player && player.alive && myScore > 0 && myScore >= priorHighScore;
   highscoreEl.classList.toggle('beating', beating);
+  // Persistent high score shown on the leaderboard
+  leaderHighScoreEl.textContent = fmtScore(highScore);
 
   // powerup box
   if (player.activePowerup) {
@@ -2831,27 +2880,22 @@ const introPwDesc = document.getElementById('introPwDesc');
 let introHideTimer = null;
 
 function showLevelIntro() {
-  const cfg = LEVEL_CONFIG[level - 1];
+  const playerLevel = (player && player.level) || 1;
+  const idx = Math.min(playerLevel, LEVEL_CONFIG.length) - 1;
+  const cfg = LEVEL_CONFIG[idx];
   introLevelTag.textContent = `LEVEL ${cfg.n}`;
   const t = cfg.label.split('—')[1] || cfg.label;
   introTitle.textContent = t.trim();
   introPwDesc.textContent = cfg.sub;
   intro.classList.add('show');
-  // Auto-dismiss after a few seconds
   if (introHideTimer) clearTimeout(introHideTimer);
   introHideTimer = setTimeout(() => intro.classList.remove('show'), 3500);
-  // Grant 3-second spawn invulnerability to all living ships.
-  // This is the kill-shield (time-based invuln) — it doesn't touch the SHIELD
-  // powerup's shieldHP (which absorbs one hit and persists until consumed),
-  // so a player holding the SHIELD powerup keeps it AND gets the temporary
-  // invuln on top. Don't shorten an existing longer kill-shield.
-  const now = performance.now();
-  const grantUntil = now + 3000;
-  for (const s of [player, ...bots]) {
-    if (!s || !s.alive) continue;
-    if (grantUntil > s.killShieldUntil) {
-      s.killShieldUntil = grantUntil;
-    }
+  // Grant 3-second spawn invulnerability ONLY to the player who leveled up
+  // (the local player here). Other ships keep their own state.
+  if (player && player.alive) {
+    const now = performance.now();
+    const grantUntil = now + 3000;
+    if (grantUntil > player.killShieldUntil) player.killShieldUntil = grantUntil;
   }
 }
 
@@ -3090,12 +3134,12 @@ const NET = {
   // Joiner input queue: each input is delivered to host as a message
 };
 
-// Generate a short, friendly code for hosting (e.g. "WORDS-A7K2").
+// Generate a short, friendly 4-character code for hosting (e.g. "A7K2").
 function generateHostCode() {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // skip ambiguous I/O/0/1
   let s = '';
   for (let i = 0; i < 4; i++) s += alphabet[Math.floor(Math.random() * alphabet.length)];
-  return 'WORDS-' + s;
+  return s;
 }
 
 // Lobby DOM helpers
@@ -3166,6 +3210,10 @@ function updateNetStatus(text, isError) {
 }
 
 // ----- Host flow -----
+// Internal namespace so our short codes don't collide with random other apps
+// sharing the public PeerJS broker.
+const PEER_NAMESPACE = 'wordsteroids-';
+
 function startHostingGame() {
   NET.myName = getMyName();
   NET.hostCode = generateHostCode();
@@ -3176,8 +3224,9 @@ function startHostingGame() {
   hostUrlEl.textContent = url.toString();
   hostWaitMsg.textContent = 'connecting to broker...';
 
-  // PeerJS uses public broker by default. Use our code as the peer ID.
-  NET.peer = new Peer(NET.hostCode);
+  // PeerJS uses public broker by default. Namespaced peer ID under the hood,
+  // but the user only sees the 4-char code.
+  NET.peer = new Peer(PEER_NAMESPACE + NET.hostCode);
   NET.peer.on('open', id => {
     hostWaitMsg.textContent = 'waiting for joiner...';
   });
@@ -3270,7 +3319,7 @@ function startJoiningGame() {
   NET.peer = new Peer();
   NET.peer.on('open', () => {
     joinStatus.textContent = 'connecting to host...';
-    const conn = NET.peer.connect(code, { reliable: true });
+    const conn = NET.peer.connect(PEER_NAMESPACE + code, { reliable: true });
     NET.conn = conn;
     conn.on('open', () => {
       conn.send({ type: 'hello', name: NET.myName });
@@ -3351,17 +3400,21 @@ function broadcastSnapshot() {
       ksU: s.killShieldUntil,
       col: s.color,
       ip: s.isPlayer ? 1 : 0,
+      lv: s.level || 1, // personal level
     });
   }
   const snap = {
     ships,
-    bullets: bullets.map(b => ({ x: Math.round(b.x), y: Math.round(b.y), c: b.color, k: b.isKing ? 1 : 0, ofs: b.offScreenFire ? 1 : 0, nk: b.isNuke ? 1 : 0, nr: b.nukeRadius || 0 })),
+    bullets: bullets.map(b => ({ x: Math.round(b.x), y: Math.round(b.y), c: b.color, k: b.isKing ? 1 : 0, fx: Math.round(b.fx || b.x), fy: Math.round(b.fy || b.y), nk: b.isNuke ? 1 : 0, nr: b.nukeRadius || 0 })),
     pickups: pickups.map(p => ({ x: Math.round(p.x), y: Math.round(p.y), k: p.key, exp: p.expiresAt })),
     shockwaves: shockwaves.map(sw => ({ x: Math.round(sw.x), y: Math.round(sw.y), r: Math.round(sw.radius), mr: sw.maxRadius, lf: sw.life, ml: sw.maxLife, c: sw.color })),
     level,
     worldW: WORLD.w, worldH: WORLD.h,
     kingId: king ? king.id : null,
-    flash, // current screen flash if any
+    // flash: send remaining ms (relative to host clock) so the joiner can
+    // rebuild against their own local clock. Absolute timestamps would never
+    // line up between the two browsers' performance.now() clocks.
+    flash: flash ? { color: flash.color, ms: Math.max(0, flash.until - now) } : null,
     t: now,
   };
   try {
