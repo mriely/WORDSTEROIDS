@@ -1379,9 +1379,9 @@ class Ship {
       if (Math.abs(this.vx) < 1) this.vx = 0;
       if (Math.abs(this.vy) < 1) this.vy = 0;
     } else {
-      // Time-based ambient drag (frame-rate independent). Lets ships coast
-      // to a near-stop over ~30 seconds without thrust input.
-      const decayPerSec = 0.92;
+      // Ambient drag — ~20% velocity loss per second. Frame-rate independent.
+      // Ships still coast meaningfully but slow to a near-stop within a few seconds.
+      const decayPerSec = 0.80;
       const decay = Math.pow(decayPerSec, dt);
       this.vx *= decay;
       this.vy *= decay;
@@ -1712,17 +1712,8 @@ window.addEventListener('keydown', (e) => {
     }
     return;
   }
-  // Spacebar = brake. Holding it rapidly decelerates the ship.
-  // (Default browser behavior would scroll the page; preventDefault stops that.)
-  if (e.key === ' ' || e.code === 'Space') {
-    e.preventDefault();
-    if (NET.mode === 'joiner') {
-      sendInput('brake', 1, 0, false);
-    } else if (player.alive) {
-      player.braking = true;
-    }
-    return;
-  }
+  // (Spacebar unbound for now — ships rely on ambient drag for deceleration.
+  // The brake mechanic on Ship still exists and bots can use it.)
 
   if (!player.alive) return;
   if (e.key.length === 1 && /[a-zA-Z]/.test(e.key)) {
@@ -1732,17 +1723,6 @@ window.addEventListener('keydown', (e) => {
     typedBuffer = typedBuffer.slice(0, -1);
   } else if (e.key === 'Escape') {
     typedBuffer = '';
-  }
-});
-
-// Spacebar release: stop braking
-window.addEventListener('keyup', (e) => {
-  if (e.key === ' ' || e.code === 'Space') {
-    if (NET.mode === 'joiner') {
-      sendInput('brake', 0, 0, false);
-    } else if (player) {
-      player.braking = false;
-    }
   }
 });
 
@@ -2438,14 +2418,8 @@ function drawShip(s, cam) {
   const flashed = (performance.now() - s.flashAt) < 120;
   const thrust = (performance.now() - s.thrustAt) < 200;
 
-  // King aura
-  if (isKingShip) {
-    const pulse = 1 + Math.sin(performance.now()/200) * 0.1;
-    ctx.fillStyle = 'rgba(255,210,63,0.15)';
-    ctx.beginPath();
-    ctx.arc(sx, sy, size * pulse, 0, Math.PI*2);
-    ctx.fill();
-  }
+  // (Removed king aura halo — it looked like a defensive shield. The blinking
+  // gold border and inner stroke alone communicate king status now.)
 
   // (Thrust glow trail removed — used to flash on the side opposite the thrust
   // direction, which read as confusing: pressing top made the bottom glow.)
@@ -2796,7 +2770,6 @@ const leaderboardEl = document.getElementById('leaderboard');
 const powerupBox = document.getElementById('powerupBox');
 const powerupLabel = document.getElementById('powerupLabel');
 const powerupFill = document.getElementById('powerupFill');
-const leaderHighScoreEl = document.getElementById('leaderHighScore');
 
 function updateHUD() {
   // Show the local player's personal level (each ship has its own level)
@@ -2810,8 +2783,7 @@ function updateHUD() {
   // the player is currently sitting on a new high score.
   const beating = player && player.alive && myScore > 0 && myScore >= priorHighScore;
   highscoreEl.classList.toggle('beating', beating);
-  // Persistent high score shown on the leaderboard
-  leaderHighScoreEl.textContent = fmtScore(highScore);
+  // Persistent high score is included when leaderboard rebuilds below.
 
   // powerup box
   if (player.activePowerup) {
@@ -2837,17 +2809,21 @@ function updateHUD() {
   // All ships for leaderboard: include remotePlayer (in host mode) alongside player + bots
   const allShips = remotePlayer ? [player, remotePlayer, ...bots] : [player, ...bots];
   const ships = allShips.slice().sort((a,b) => b.score - a.score);
-  let html = '<h3>// leaderboard</h3>';
+  // Rebuild the whole leaderboard, including the high-row at the top.
+  let html = `
+    <div class="high-row">
+      <span class="high-label">// all-time high</span>
+      <span class="high-value">${fmtScore(highScore)}</span>
+    </div>
+    <h3>// leaderboard</h3>
+  `;
   for (const s of ships) {
     const cls = [];
     if (king && king.id === s.id) cls.push('king');
     if (s.isPlayer) cls.push('you');
     if (!s.alive) cls.push('dead');
     const crown = (king && king.id === s.id) ? '👑 ' : '';
-    // king/you classes win via CSS color; bots get their ship color inline
     const isKingOrYou = cls.includes('king') || cls.includes('you');
-    // Stealth ships render in dim gray so the name is still legible on the
-    // leaderboard (their actual ship color would be unreadable text on dark UI).
     let textColor = s.color;
     if (s.stealth) textColor = '#aab';
     const styleAttr = isKingOrYou ? '' : ` style="color:${textColor}; text-shadow: 0 0 6px ${textColor}80"`;
