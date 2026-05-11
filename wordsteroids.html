@@ -697,43 +697,43 @@ const POWERUP_DEFS = {
   boost: {
     name: 'BOOST', color: '#5aff7c', tier: 1,
     desc: 'each thrust pushes you 2× harder.',
-    duration: 20,
+    duration: 30,
     type: 'passive',
   },
   spread: {
     name: 'SPREAD', color: '#ff8c1a', tier: 1,
     desc: 'fire = 3-bullet fan.',
-    duration: 20,
+    duration: 30,
     type: 'weapon',
   },
   blast: {
     name: 'BLAST', color: '#d65bff', tier: 1,
     desc: 'fire = short-range shockwave.',
-    duration: 20,
+    duration: 30,
     type: 'weapon',
   },
   multishot: {
     name: 'MULTI', color: '#3aa0ff', tier: 1,
     desc: 'fire = bullets from all 4 sides at once.',
-    duration: 20,
+    duration: 30,
     type: 'weapon',
   },
   phantom: {
     name: 'PHANTOM', color: '#a06bff', tier: 2,
     desc: 'invisible to enemies. they can\'t target you.',
-    duration: 20,
+    duration: 30,
     type: 'passive',
   },
   vampire: {
     name: 'VAMPIRE', color: '#ff3050', tier: 3,
     desc: 'each kill refreshes your invuln shield.',
-    duration: 20,
+    duration: 30,
     type: 'passive',
   },
   nuke: {
     name: 'NUKE', color: '#fff4c2', tier: 3,
     desc: 'fire = launches a nuke. detonates on impact.',
-    duration: 20,
+    duration: 30,
     type: 'weapon',
   },
 };
@@ -1291,13 +1291,6 @@ class Ship {
         nukeBlastRadius: 280,     // smaller than the old 9999 screen-clearer
       };
       bullets.push(nukeBullet);
-      // Muzzle flash at launch site — visible per-viewer via viewport clip
-      shockwaves.push({
-        x: this.x, y: this.y,
-        radius: 0, maxRadius: 80,
-        life: 0.4, maxLife: 0.4,
-        color: baseColor,
-      });
       return;
     }
 
@@ -1355,16 +1348,8 @@ class Ship {
       bullets.push(makeBullet(dirAngle, this));
     }
 
-    // Muzzle-flash hint at the firing location. Always spawned; each viewer's
-    // viewport clip determines whether they actually see it on screen. This
-    // ensures multiplayer viewers get a visual cue when the shooter is off
-    // their viewport even if they're on the other player's viewport.
-    shockwaves.push({
-      x: this.x, y: this.y,
-      radius: 0, maxRadius: 60,
-      life: 0.3, maxLife: 0.3,
-      color: baseColor,
-    });
+    // (Muzzle flash removed — was producing a visible "blast" behind every
+    // shot. The bullet itself is the visual indicator now.)
   }
 
   update(dt) {
@@ -1384,16 +1369,24 @@ class Ship {
       this.shieldHP = 0;
     }
 
-    // Space physics: NO default friction. Velocity persists unless braked.
-    // Player brakes by holding spacebar. Bots may decide to brake via their AI.
+    // Space physics: very gentle ambient drag (~8%/sec) plus a strong brake
+    // when actively braking. Player brakes by holding spacebar; bots may decide
+    // to brake via their AI.
     if (this.braking) {
-      // Strong but not instant brake — a smooth slowdown
       const brake = 0.90;
       this.vx *= brake;
       this.vy *= brake;
-      // Snap to zero when very slow so we don't drift forever at tiny velocities
       if (Math.abs(this.vx) < 1) this.vx = 0;
       if (Math.abs(this.vy) < 1) this.vy = 0;
+    } else {
+      // Time-based ambient drag (frame-rate independent). Lets ships coast
+      // to a near-stop over ~30 seconds without thrust input.
+      const decayPerSec = 0.92;
+      const decay = Math.pow(decayPerSec, dt);
+      this.vx *= decay;
+      this.vy *= decay;
+      if (Math.abs(this.vx) < 0.5) this.vx = 0;
+      if (Math.abs(this.vy) < 0.5) this.vy = 0;
     }
     this.x += this.vx * dt;
     this.y += this.vy * dt;
