@@ -1824,7 +1824,9 @@ function refreshWordSlot(ship, oldWord) {
   const slot = slots.find(s => ship.words[s] === oldWord);
   if (!slot) return;
   const otherFirsts = new Set(slots.filter(s => s !== slot).map(s => ship.words[s][0]));
-  const cfg = LEVEL_CONFIG[level - 1];
+  // Use the ship's own personal level for word length
+  const lvl = ship.level || 1;
+  const cfg = LEVEL_CONFIG[Math.min(lvl, LEVEL_CONFIG.length) - 1];
   const cand = pickWordOfLength(cfg.wordLength, otherFirsts);
   if (cand) ship.words[slot] = cand;
 }
