@@ -178,6 +178,30 @@ function draw() {
       ctx.arc(sx, sy, r * 0.45, 0, Math.PI * 2);
       ctx.fill();
       ctx.shadowBlur = 0;
+    } else if (b.isGiant) {
+      const r = b.giantRadius || 20;
+      // Soft outer halo
+      ctx.fillStyle = b.color;
+      ctx.globalAlpha = 0.18;
+      ctx.shadowColor = b.color;
+      ctx.shadowBlur = 24;
+      ctx.beginPath();
+      ctx.arc(sx, sy, r * 1.25, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      // Solid body
+      ctx.shadowBlur = 16;
+      ctx.beginPath();
+      ctx.arc(sx, sy, r, 0, Math.PI * 2);
+      ctx.fill();
+      // Bright inner core
+      ctx.fillStyle = '#ffffff';
+      ctx.globalAlpha = 0.55;
+      ctx.shadowBlur = 0;
+      ctx.beginPath();
+      ctx.arc(sx, sy, r * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
     } else if (b.isKing) {
       ctx.fillStyle = 'rgba(255,210,63,0.3)';
       ctx.beginPath();
@@ -453,6 +477,67 @@ function drawShip(s, cam) {
     ctx.beginPath(); ctx.arc(sx - half - 6, sy, pulseM, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.arc(sx, sy + half + 6, pulseM, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.arc(sx, sy - half - 6, pulseM, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  // ----- Giant indicator (heavy pulsing ring — like a charging cannon) -----
+  if (s.activePowerup && s.activePowerup.key === 'giant') {
+    const pulseG = 0.5 + Math.sin(performance.now() / 240) * 0.4;
+    ctx.shadowColor = '#ff9933';
+    ctx.shadowBlur = 18;
+    ctx.strokeStyle = `rgba(255, 153, 51, ${pulseG})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(sx, sy, half + 14, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  // ----- Spike aura (8 triangular spikes around the ship) -----
+  if (s.activePowerup && s.activePowerup.key === 'spike') {
+    const spikeLen = 12 + Math.sin(performance.now() / 220) * 2;
+    const baseHalf = 3.5;
+    ctx.fillStyle = '#c8cdd6';
+    ctx.strokeStyle = '#ffffff';
+    ctx.shadowColor = '#c8cdd6';
+    ctx.shadowBlur = 8;
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 8; i++) {
+      const ang = i * (Math.PI / 4);
+      const baseX = sx + Math.cos(ang) * half;
+      const baseY = sy + Math.sin(ang) * half;
+      const tipX = sx + Math.cos(ang) * (half + spikeLen);
+      const tipY = sy + Math.sin(ang) * (half + spikeLen);
+      const perp = ang + Math.PI / 2;
+      const b1x = baseX + Math.cos(perp) * baseHalf;
+      const b1y = baseY + Math.sin(perp) * baseHalf;
+      const b2x = baseX - Math.cos(perp) * baseHalf;
+      const b2y = baseY - Math.sin(perp) * baseHalf;
+      ctx.beginPath();
+      ctx.moveTo(b1x, b1y);
+      ctx.lineTo(tipX, tipY);
+      ctx.lineTo(b2x, b2y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.shadowBlur = 0;
+  }
+
+  // ----- Multi-spread indicator (8 spokes — cardinals + diagonals) -----
+  if (s.activePowerup && s.activePowerup.key === 'multispread') {
+    ctx.fillStyle = '#7a4cff';
+    ctx.shadowColor = '#7a4cff';
+    ctx.shadowBlur = 10;
+    const pulseMS = 2.5 + Math.sin(performance.now() / 180) * 1;
+    for (let i = 0; i < 8; i++) {
+      const ang = i * (Math.PI / 4);
+      const ox = Math.cos(ang) * (half + 8);
+      const oy = Math.sin(ang) * (half + 8);
+      ctx.beginPath();
+      ctx.arc(sx + ox, sy + oy, pulseMS, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.shadowBlur = 0;
   }
 

@@ -67,7 +67,7 @@ const POWERUP_DEFS = {
     type: 'weapon',
   },
   phantom: {
-    name: 'PHANTOM', color: '#a06bff', tier: 2,
+    name: 'PHANTOM', color: '#a06bff', tier: 4,
     desc: 'invisible to enemies. they can\'t target you.',
     duration: 30,
     type: 'passive',
@@ -78,11 +78,29 @@ const POWERUP_DEFS = {
     duration: 30,
     type: 'passive',
   },
+  giant: {
+    name: 'GIANT', color: '#ff9933', tier: 3,
+    desc: 'fire = ship-sized bullet that pierces. bigger with level.',
+    duration: 30,
+    type: 'weapon',
+  },
   nuke: {
     name: 'NUKE', color: '#fff4c2', tier: 3,
     desc: 'fire = launches a nuke. detonates on impact.',
     duration: 30,
     type: 'weapon',
+  },
+  multispread: {
+    name: 'MULTI SPREAD', color: '#7a4cff', tier: 4,
+    desc: 'fire = 3-bullet spread in all 4 directions.',
+    duration: 30,
+    type: 'weapon',
+  },
+  spike: {
+    name: 'SPIKE', color: '#c8cdd6', tier: 4,
+    desc: 'ram into ships to destroy them. shielded enemies are immune.',
+    duration: 30,
+    type: 'passive',
   },
 };
 
@@ -482,6 +500,7 @@ function drawFromSnapshot() {
   const stubBullets = state.bullets.map(b => ({
     x: b.x, y: b.y, color: b.c, isKing: !!b.k, fx: b.fx, fy: b.fy,
     isNuke: !!b.nk, nukeRadius: b.nr || 0,
+    isGiant: !!b.g, giantRadius: b.gr || 0,
   }));
   const stubPickups = state.pickups.map(p => ({
     x: p.x, y: p.y, key: p.k,
@@ -563,6 +582,28 @@ function loop() {
     if (remotePlayer) remotePlayer.update(dt);
     for (const b of bots) b.update(dt);
 
+    // SPIKE — contact damage. Any SPIKE-active ship destroys others it
+    // overlaps, except ships that are shielded (any shieldHP) or under
+    // spawn/kill-shield invulnerability. Bypasses damage() so a shield is
+    // *blocked* (not consumed) by spike contact, per the powerup's design.
+    const allShipsForSpike = remotePlayer ? [player, remotePlayer, ...bots] : [player, ...bots];
+    for (const a of allShipsForSpike) {
+      if (!a.alive) continue;
+      if (!(a.activePowerup && a.activePowerup.key === 'spike')) continue;
+      for (const t of allShipsForSpike) {
+        if (a === t || !t.alive) continue;
+        if (t.shieldHP > 0) continue;
+        if (performance.now() < t.killShieldUntil) continue;
+        const dx = wrapDelta(a.x, t.x, WORLD.w);
+        const dy = wrapDelta(a.y, t.y, WORLD.h);
+        const minDist = a.hitHalf() + t.hitHalf();
+        if (Math.abs(dx) < minDist && Math.abs(dy) < minDist) {
+          spawnExplosion(t.x, t.y, '#c8cdd6', 28);
+          t.die(a);
+        }
+      }
+    }
+
     // bullets
     for (let i = bullets.length - 1; i >= 0; i--) {
       const b = bullets[i];
@@ -584,9 +625,20 @@ function loop() {
         const dx = wrapDelta(b.x, s.x, WORLD.w);
         const dy = wrapDelta(b.y, s.y, WORLD.h);
         const hh = s.hitHalf();
-        // NUKEs use a slightly larger contact size (because the projectile is big)
-        const contact = b.isNuke ? hh + (b.nukeRadius || 14) : hh;
-        if (Math.abs(dx) < contact && Math.abs(dy) < contact) {
+        // Bullet contact size depends on type. GIANT and NUKE projectiles are
+        // physically large; GIANT uses circular contact since it's a true disc.
+        let contact, inRange;
+        if (b.isNuke) {
+          contact = hh + (b.nukeRadius || 14);
+          inRange = Math.abs(dx) < contact && Math.abs(dy) < contact;
+        } else if (b.isGiant) {
+          contact = hh + (b.giantRadius || 20);
+          inRange = Math.hypot(dx, dy) <= contact;
+        } else {
+          contact = hh;
+          inRange = Math.abs(dx) < contact && Math.abs(dy) < contact;
+        }
+        if (inRange) {
           if (b.isNuke) {
             // NUKE detonation: spawn a large blast that damages every ship within radius.
             const blastR = b.nukeBlastRadius || 280;
@@ -613,12 +665,22 @@ function loop() {
             if (Math.abs(pdx) < W/2 + blastR && Math.abs(pdy) < H/2 + blastR) {
               flashScreen('#ff2030', 0.4);
             }
+            bullets.splice(i, 1);
+            removed = true;
+            break;
+          } else if (b.isGiant) {
+            // Pierce: damage the target but keep flying. b.hits prevents
+            // re-hitting the same ship on later frames.
+            s.damage(b.owner);
+            b.hits.add(s.id);
+            // No splice/break — continue scanning remaining ships this frame
+            // so the giant bullet can hit several at once if they're stacked.
           } else {
             s.damage(b.owner);
+            bullets.splice(i, 1);
+            removed = true;
+            break;
           }
-          bullets.splice(i, 1);
-          removed = true;
-          break;
         }
       }
       if (removed) continue;

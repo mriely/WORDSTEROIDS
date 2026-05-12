@@ -92,14 +92,16 @@ class Ship {
       // Regicide bounty: killing the king is worth 5 points instead of 1.
       const wasKing = king && king.id === this.id;
       byShip.score += wasKing ? 5 : 1;
-      // Kill-reward: 3-second time-based invulnerability.
-      byShip.killShieldUntil = performance.now() + 3000;
-      // VAMPIRE: every kill grants a fresh persistent shield (absorbs one hit,
-      // lasts until consumed) AND resets fire cooldown for chain kills.
       const isVampire = byShip.activePowerup && byShip.activePowerup.key === 'vampire';
       if (isVampire) {
+        // VAMPIRE: replaces the standard white kill-shield with a cyan one.
+        // Cyan = no time limit, but breaks after one hit. Also resets fire
+        // cooldown so vampires can chain kills.
         byShip.shieldHP = Math.max(byShip.shieldHP, 1);
-        byShip.fireCooldown = 0; // chain kills
+        byShip.fireCooldown = 0;
+      } else {
+        // Standard kill-reward: 3-second white invulnerability.
+        byShip.killShieldUntil = performance.now() + 3000;
       }
     }
     spawnExplosion(this.x, this.y, this.stealth ? '#888' : this.color, 24);
@@ -176,6 +178,8 @@ class Ship {
     const isBlast = apk === 'blast';
     const isMulti = apk === 'multishot';
     const isNuke = apk === 'nuke';
+    const isGiant = apk === 'giant';
+    const isMultiSpread = apk === 'multispread';
     const baseColor = this.weaponColor();
 
     if (isNuke) {
@@ -201,6 +205,29 @@ class Ship {
         nukeBlastRadius: 280,     // smaller than the old 9999 screen-clearer
       };
       bullets.push(nukeBullet);
+      return;
+    }
+
+    if (isGiant) {
+      // Ship-sized projectile that pierces (each target hit at most once).
+      // Diameter = current ship size, scaled up further by player level past 3.
+      this.fireCooldown = 0.6;
+      const giantAngle = Math.atan2(this.lastDir.y, this.lastDir.x);
+      const giantSpeed = 280; // slower than normal bullets (520) — big and lumbering
+      const levelScale = 1 + Math.max(0, this.level - 3) * 0.08;
+      bullets.push({
+        x: this.x, y: this.y,
+        vx: Math.cos(giantAngle) * giantSpeed,
+        vy: Math.sin(giantAngle) * giantSpeed,
+        owner: this,
+        life: 2.2,
+        color: baseColor,
+        isKing,
+        hits: new Set(),
+        fx: this.x, fy: this.y,
+        isGiant: true,
+        giantRadius: this.size * 0.5 * levelScale,
+      });
       return;
     }
 
@@ -244,7 +271,15 @@ class Ship {
       };
     }
 
-    if (isMulti) {
+    if (isMultiSpread) {
+      // 3-bullet spread in each of 4 cardinal directions = 12 bullets
+      const cardinals = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
+      for (const a of cardinals) {
+        bullets.push(makeBullet(a - 0.25, this));
+        bullets.push(makeBullet(a, this));
+        bullets.push(makeBullet(a + 0.25, this));
+      }
+    } else if (isMulti) {
       // Fire from all 4 cardinal directions at once
       bullets.push(makeBullet(0, this));
       bullets.push(makeBullet(Math.PI / 2, this));
@@ -272,11 +307,10 @@ class Ship {
     }
     this.fireCooldown = Math.max(0, this.fireCooldown - dt);
 
-    // expire powerup
+    // expire powerup. The cyan shield (shieldHP) is intentionally NOT cleared
+    // here — it lasts until consumed by a hit, independent of any activePowerup.
     if (this.activePowerup && performance.now() >= this.activePowerup.expiresAt) {
-      // shield only expires on consumption OR time, whichever first
       this.activePowerup = null;
-      this.shieldHP = 0;
     }
 
     // Space physics: very gentle ambient drag (~8%/sec) plus a strong brake

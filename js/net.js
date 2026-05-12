@@ -297,7 +297,7 @@ function broadcastSnapshot() {
   }
   const snap = {
     ships,
-    bullets: bullets.map(b => ({ x: Math.round(b.x), y: Math.round(b.y), c: b.color, k: b.isKing ? 1 : 0, fx: Math.round(b.fx || b.x), fy: Math.round(b.fy || b.y), nk: b.isNuke ? 1 : 0, nr: b.nukeRadius || 0 })),
+    bullets: bullets.map(b => ({ x: Math.round(b.x), y: Math.round(b.y), c: b.color, k: b.isKing ? 1 : 0, fx: Math.round(b.fx || b.x), fy: Math.round(b.fy || b.y), nk: b.isNuke ? 1 : 0, nr: b.nukeRadius || 0, g: b.isGiant ? 1 : 0, gr: b.giantRadius || 0 })),
     pickups: pickups.map(p => ({ x: Math.round(p.x), y: Math.round(p.y), k: p.key, exp: p.expiresAt })),
     shockwaves: shockwaves.map(sw => ({ x: Math.round(sw.x), y: Math.round(sw.y), r: Math.round(sw.radius), mr: sw.maxRadius, lf: sw.life, ml: sw.maxLife, c: sw.color })),
     level,
