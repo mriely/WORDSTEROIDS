@@ -26,6 +26,11 @@ const BASE_WORLD = { w: 6000, h: 4500 };
 const WORLD = { w: BASE_WORLD.w, h: BASE_WORLD.h };
 const WORLD_GROWTH_PER_LEVEL = 0.15; // 15% bigger per level (linear)
 
+// Camera zoom-out factor — 1.2 means each viewport shows 20% more world per
+// axis than the raw 1600×900 canvas would, by scaling world rendering down
+// in draw(). HUD/flash/minimap stay at native scale.
+const VIEW_ZOOM = 1.2;
+
 // LEVEL_CONFIG is built dynamically by buildLevelConfig() once the dictionary loads.
 // Each level has: { n, label, sub, wordLength, scoreToAdvance }
 
@@ -131,7 +136,8 @@ function isOnPlayerScreen(x, y, margin = 40) {
   if (!player) return true;
   const dx = wrapDelta(player.x, x, WORLD.w);
   const dy = wrapDelta(player.y, y, WORLD.h);
-  return Math.abs(dx) <= W / 2 + margin && Math.abs(dy) <= H / 2 + margin;
+  // Half-spans scale with VIEW_ZOOM because draw() shows a wider chunk of world
+  return Math.abs(dx) <= W * VIEW_ZOOM / 2 + margin && Math.abs(dy) <= H * VIEW_ZOOM / 2 + margin;
 }
 
 // Score-to-size growth (logarithmic — fast early, slow later)
@@ -293,6 +299,40 @@ function flashScreen(color, secs) {
   flash = { color, until: performance.now() + secs * 1000 };
 }
 
+// Two-layer rainbow burst spawned at a ship's position whenever a human player
+// completes a word. Inner white pop + outer prismatic ring — meant to feel like
+// confetti, not damage. Bots don't get this (it'd be constant visual noise).
+function spawnWordSparkle(x, y) {
+  for (let i = 0; i < 8; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const s = Math.random() * 180 + 60;
+    particles.push({
+      x, y,
+      vx: Math.cos(a) * s,
+      vy: Math.sin(a) * s,
+      life: 0.4 + Math.random() * 0.3,
+      maxLife: 0.8,
+      color: '#ffffff',
+      r: 2 + Math.random() * 2,
+    });
+  }
+  const count = 22;
+  for (let i = 0; i < count; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const s = Math.random() * 320 + 120;
+    const hue = Math.floor((i / count) * 360 + Math.random() * 40) % 360;
+    particles.push({
+      x, y,
+      vx: Math.cos(a) * s,
+      vy: Math.sin(a) * s,
+      life: 0.8 + Math.random() * 0.5,
+      maxLife: 1.4,
+      color: `hsl(${hue}, 95%, 65%)`,
+      r: 2 + Math.random() * 2.5,
+    });
+  }
+}
+
 // ----- Input -----
 window.addEventListener('keydown', (e) => {
   // Audio: kick off playback on first interaction (browsers block autoplay)
@@ -413,6 +453,7 @@ function handlePlayerTyping(shift) {
       if (NET.mode !== 'joiner') {
         refreshWordSlot(player, c.word);
         player.creditCorrectLetters(c.word.length);
+        spawnWordSparkle(player.x, player.y);
       }
       typedBuffer = '';
       return;
@@ -492,7 +533,7 @@ function drawFromSnapshot() {
     color: sh.col,
     isPlayer: !!sh.ip,
     level: sh.lv || 1,
-    activePowerup: sh.pu ? { key: sh.pu, expiresAt: performance.now() + (sh.puMs || 0) } : null,
+    activePowerup: sh.pu ? { key: sh.pu, expiresAt: performance.now() + (sh.puMs || 0), totalSec: sh.puTs || 0 } : null,
     shieldHP: sh.shp || 0,
     killShieldUntil: sh.ksU || 0,
     fireCooldown: 0,
@@ -585,6 +626,11 @@ function drawFromSnapshot() {
     // Run the HUD update inside the swap so the leaderboard sees all the
     // ships (and updateHUD can read player.score / player.activePowerup etc).
     updateHUD();
+    // Joiner doesn't run the host simulation loop, so the high-score check
+    // never fires there otherwise — the leaderboard "all-time high" would
+    // stay frozen at whatever was in local storage at boot. Run it here off
+    // the swapped-in meStub so the joiner's local best tracks their score.
+    maybeUpdateHighScore();
   } finally {
     player = savedPlayer;
     remotePlayer = savedRemote;

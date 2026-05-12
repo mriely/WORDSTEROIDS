@@ -188,12 +188,14 @@ function applyRemoteInput(action, dx, dy, shift) {
     else if (dy === 1) slot = 'down';
     if (slot && remotePlayer.words && remotePlayer.words[slot]) {
       remotePlayer.creditCorrectLetters(remotePlayer.words[slot].length);
+      spawnWordSparkle(remotePlayer.x, remotePlayer.y);
       refreshWordSlot(remotePlayer, remotePlayer.words[slot]);
     }
   } else if (action === 'fire') {
     remotePlayer.fire();
     if (remotePlayer.words && remotePlayer.words.fire) {
       remotePlayer.creditCorrectLetters(remotePlayer.words.fire.length);
+      spawnWordSparkle(remotePlayer.x, remotePlayer.y);
       refreshWordSlot(remotePlayer, remotePlayer.words.fire);
     }
   } else if (action === 'brake') {
@@ -293,6 +295,9 @@ function broadcastSnapshot() {
       // Remaining ms on the host's clock. Joiner rebuilds expiresAt against its
       // own performance.now(), since the two browsers' clocks don't line up.
       puMs: s.activePowerup ? Math.max(0, s.activePowerup.expiresAt - now) : 0,
+      // Total duration in seconds (so the joiner's HUD bar uses the same
+      // level-scaled total the host used at pickup).
+      puTs: s.activePowerup ? (s.activePowerup.totalSec || 0) : 0,
       shp: s.shieldHP,
       ksU: s.killShieldUntil,
       col: s.color,

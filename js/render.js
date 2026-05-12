@@ -9,6 +9,15 @@ function draw() {
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, W, H);
 
+  // ----- Camera zoom-out: scale world rendering down by VIEW_ZOOM so each
+  // viewport reveals proportionally more world. Per-object cull margins below
+  // are widened to account for the wider effective view (pre-scale virtual
+  // coords span W*VIEW_ZOOM × H*VIEW_ZOOM, all clipped onto the W × H canvas).
+  ctx.save();
+  ctx.translate(W/2, H/2);
+  ctx.scale(1 / VIEW_ZOOM, 1 / VIEW_ZOOM);
+  ctx.translate(-W/2, -H/2);
+
   drawGrid(cam);
 
   for (const s of stars) {
@@ -16,7 +25,7 @@ function draw() {
     let sy = s.y - cam.y * s.layer;
     sx = ((sx % WORLD.w) + WORLD.w) % WORLD.w;
     sy = ((sy % WORLD.h) + WORLD.h) % WORLD.h;
-    if (sx > W || sy > H) continue;
+    if (sx > W + 200 || sy > H + 200) continue;
     s.twinkle += 0.02;
     const alpha = 0.3 + Math.sin(s.twinkle) * 0.2 + s.layer * 0.4;
     ctx.fillStyle = `rgba(${200 + s.layer*55|0}, ${220 + s.layer*35|0}, 255, ${alpha})`;
@@ -30,7 +39,7 @@ function draw() {
     const syw = wrapDelta(cam.y + H/2, p.y, WORLD.h);
     const sx = W/2 + sxw;
     const sy = H/2 + syw;
-    if (sx < -40 || sx > W+40 || sy < -40 || sy > H+40) continue;
+    if (sx < -240 || sx > W+240 || sy < -240 || sy > H+240) continue;
     p.bob += 0.04;
     const bob = Math.sin(p.bob) * 3;
 
@@ -121,7 +130,7 @@ function draw() {
     const syw = wrapDelta(cam.y + H/2, sw.y, WORLD.h);
     const sx = W/2 + sxw;
     const sy = H/2 + syw;
-    if (sx < -200 || sx > W+200 || sy < -200 || sy > H+200) continue;
+    if (sx < -400 || sx > W+400 || sy < -400 || sy > H+400) continue;
     const alpha = sw.life / sw.maxLife;
     ctx.strokeStyle = sw.color;
     ctx.shadowColor = sw.color;
@@ -149,7 +158,7 @@ function draw() {
     const syw = wrapDelta(cam.y + H/2, b.y, WORLD.h);
     const sx = W/2 + sxw;
     const sy = H/2 + syw;
-    if (sx < -40 || sx > W+40 || sy < -40 || sy > H+40) continue;
+    if (sx < -240 || sx > W+240 || sy < -240 || sy > H+240) continue;
     if (b.isNuke) {
       // Big pulsing orb with red-hot core. Hard to miss.
       const t = performance.now() / 100;
@@ -240,6 +249,10 @@ function draw() {
     drawShip(s, cam);
   }
 
+  // End of zoomed world rendering — flash overlay and minimap stay at 1:1
+  // canvas coords so they remain crisp and edge-locked.
+  ctx.restore();
+
   // flash overlay
   if (flash && performance.now() < flash.until) {
     const t = (flash.until - performance.now()) / 150;
@@ -274,7 +287,7 @@ function drawShip(s, cam) {
   const dyw = wrapDelta(cam.y + H/2, s.y, WORLD.h);
   const sx = W/2 + dxw;
   const sy = H/2 + dyw;
-  if (sx < -100 || sx > W+100 || sy < -100 || sy > H+100) return;
+  if (sx < -300 || sx > W+300 || sy < -300 || sy > H+300) return;
 
   const size = s.size;
   const half = size / 2;
@@ -735,7 +748,7 @@ function updateHUD() {
       powerupFill.style.width = '100%';
     } else {
       const remain = (player.activePowerup.expiresAt - performance.now()) / 1000;
-      const total = def.duration;
+      const total = player.activePowerup.totalSec || def.duration;
       powerupLabel.innerHTML = `<span style="color:${def.color}; text-shadow: 0 0 6px ${def.color}">▸ ${def.name}</span> · ${remain.toFixed(1)}s`;
       powerupFill.style.width = Math.max(0, Math.min(100, (remain/total)*100)) + '%';
     }

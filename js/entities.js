@@ -69,7 +69,16 @@ class Ship {
       this.shieldHP = Math.max(this.shieldHP, 1);
       return;
     }
-    this.activePowerup = { key, expiresAt: performance.now() + def.duration * 1000 };
+    // Duration scales with the firer's personal level: 10s per level.
+    // Level 1 = 10s, level 3 = 30s (the old default), level 10 = 100s.
+    // Snapshot the total so the HUD bar uses the same value even if the
+    // ship levels up mid-effect.
+    const totalSec = this.level * 10;
+    this.activePowerup = {
+      key,
+      expiresAt: performance.now() + totalSec * 1000,
+      totalSec,
+    };
   }
 
   damage(byShip) {
