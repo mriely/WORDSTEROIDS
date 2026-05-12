@@ -2371,7 +2371,8 @@ function draw() {
   }
 
   // ships
-  for (const s of [...bots, player]) {
+  const renderList = remotePlayer ? [...bots, remotePlayer, player] : [...bots, player];
+  for (const s of renderList) {
     if (!s.alive) continue;
     drawShip(s, cam);
   }
@@ -2731,7 +2732,8 @@ function drawMinimap() {
   }
 
   // ships
-  for (const s of [...bots, player]) {
+  const mmList = remotePlayer ? [...bots, remotePlayer, player] : [...bots, player];
+  for (const s of mmList) {
     if (!s.alive) continue;
     const dx = x + s.x * sx;
     const dy = y + s.y * sy;
