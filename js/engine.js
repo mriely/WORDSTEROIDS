@@ -399,17 +399,41 @@ function handlePlayerTyping(shift) {
     { word: w.right, action: () => aimOnly ? exec('aim', 1,  0) : exec('thrust', 1,  0) },
     { word: w.fire,  action: () => exec('fire', 0, 0) },
   ];
+
+  // Credit one correct letter to the local player. Joiner's letters are
+  // credited host-side via applyRemoteInput when each action completes.
+  const creditLocal = () => {
+    if (NET.mode !== 'joiner' && player) player.creditCorrectLetters(1);
+  };
+
+  // Complete match — fire the action.
   for (const c of candidates) {
     if (typedBuffer === c.word) {
       c.action();
-      // Solo/host refreshes the word locally. Joiner's words update via snapshot.
       if (NET.mode !== 'joiner') refreshWordSlot(player, c.word);
+      creditLocal();
       typedBuffer = '';
       return;
     }
   }
-  const isPrefix = candidates.some(c => c.word.startsWith(typedBuffer));
-  if (!isPrefix) typedBuffer = '';
+
+  // Buffer still a valid prefix of some word — keep typing.
+  if (candidates.some(c => c.word.startsWith(typedBuffer))) {
+    creditLocal();
+    return;
+  }
+
+  // Wrong letter for the current word — but if the just-typed character is
+  // the first letter of another word, jump to typing that word instead.
+  const lastChar = typedBuffer.slice(-1);
+  if (lastChar && candidates.some(c => c.word.startsWith(lastChar))) {
+    typedBuffer = lastChar;
+    creditLocal();
+    return;
+  }
+
+  // Otherwise the keystroke was junk — drop everything, no credit.
+  typedBuffer = '';
 }
 
 function refreshWordSlot(ship, oldWord) {
@@ -445,11 +469,21 @@ function drawFromSnapshot() {
     return;
   }
 
+  // Dead-reckon ship positions using velocity from the last snapshot.
+  // Snapshots arrive at 20Hz but we render at 60fps; without this, ships
+  // freeze for ~3 frames then jump, which reads as jitter. Clamp dtSnap so
+  // a stalled connection doesn't fling ships across the map.
+  const dtSnap = NET.remoteLastSeen
+    ? Math.min(0.25, (performance.now() - NET.remoteLastSeen) / 1000)
+    : 0;
+  const wrapPos = (v, span) => ((v % span) + span) % span;
+
   // Build stub ships from snapshot. Each stub mimics the shape draw() expects.
   const stubs = state.ships.map(sh => ({
     id: sh.id,
     name: sh.n,
-    x: sh.x, y: sh.y,
+    x: wrapPos(sh.x + sh.vx * dtSnap, state.worldW),
+    y: wrapPos(sh.y + sh.vy * dtSnap, state.worldH),
     vx: sh.vx, vy: sh.vy,
     score: sh.sc,
     alive: !!sh.al,

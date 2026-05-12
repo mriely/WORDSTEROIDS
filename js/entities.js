@@ -29,6 +29,18 @@ class Ship {
     this.shieldHP = 0; // shield consumes a hit
     // Spawn invulnerability — 3 seconds so you can orient before getting shot
     this.killShieldUntil = performance.now() + 3000;
+    // Passive score from correct typing — every 5 letters granted to this
+    // ship (per-keystroke for the player, per-action-word-length for bots /
+    // joiners) buys +0.1 score.
+    this.correctLettersTyped = 0;
+  }
+
+  creditCorrectLetters(n) {
+    this.correctLettersTyped += n;
+    while (this.correctLettersTyped >= 5) {
+      this.correctLettersTyped -= 5;
+      this.score = Math.round((this.score + 0.1) * 10) / 10;
+    }
   }
 
   isKing() { return king && king.id === this.id; }
@@ -402,6 +414,8 @@ class Ship {
 
         if (Math.random() < fireChance) {
           this.fire();
+          // Bot "types" the fire word — credit its letters before resetWords replaces it
+          if (this.words && this.words.fire) this.creditCorrectLetters(this.words.fire.length);
           this.resetWords();
         } else {
           let target = null;
@@ -436,6 +450,9 @@ class Ship {
             [dx, dy] = randFrom(cardinals);
           }
           this.thrust(dx, dy);
+          // Credit the directional word the bot just "typed"
+          const slot = dx === -1 ? 'left' : dx === 1 ? 'right' : dy === -1 ? 'up' : 'down';
+          if (this.words && this.words[slot]) this.creditCorrectLetters(this.words[slot].length);
           this.resetWords();
         }
       }

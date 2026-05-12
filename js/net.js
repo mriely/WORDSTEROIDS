@@ -187,11 +187,13 @@ function applyRemoteInput(action, dx, dy, shift) {
     else if (dy === -1) slot = 'up';
     else if (dy === 1) slot = 'down';
     if (slot && remotePlayer.words && remotePlayer.words[slot]) {
+      remotePlayer.creditCorrectLetters(remotePlayer.words[slot].length);
       refreshWordSlot(remotePlayer, remotePlayer.words[slot]);
     }
   } else if (action === 'fire') {
     remotePlayer.fire();
     if (remotePlayer.words && remotePlayer.words.fire) {
+      remotePlayer.creditCorrectLetters(remotePlayer.words.fire.length);
       refreshWordSlot(remotePlayer, remotePlayer.words.fire);
     }
   } else if (action === 'brake') {
