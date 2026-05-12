@@ -592,13 +592,14 @@ function drawShip(s, cam) {
   drawEdgeWord(w.left, sx - half - 22, sy);
   drawEdgeWord(w.right, sx + half + 22, sy);
 
-  // Fire word inside the square. For the player it's truly centered (no name below).
-  // For bots, it sits slightly above to make room for the name+score line.
-  if (s.isPlayer) {
+  // Fire word inside the square. Only the LOCAL player gets the "no name"
+  // treatment — bots AND the remote human get a label so you can tell each
+  // ship apart (s.isPlayer was matching both human ships, leaving the joiner
+  // unnamed on the host's view and vice versa).
+  if (s === player) {
     drawEdgeWord(w.fire, sx, sy, true);
   } else {
     drawEdgeWord(w.fire, sx, sy - 6, true);
-    // Bots show just the name inside the square (score is on the leaderboard)
     const nameFontSize = Math.max(10, Math.round(size * 0.18));
     ctx.font = `${nameFontSize}px JetBrains Mono, monospace`;
     ctx.fillStyle = isKingShip ? '#ffd23f' : 'rgba(230,241,255,0.55)';
