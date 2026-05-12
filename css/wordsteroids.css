@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=VT323&family=Major+Mono+Display&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Orbitron:wght@400;700;900&display=swap');
 
 :root {
   --bg: #05060a;
@@ -20,7 +20,7 @@ html, body {
   height: 100%;
   background: var(--bg);
   color: var(--ink);
-  font-family: 'VT323', monospace;
+  font-family: 'JetBrains Mono', monospace;
   overflow: hidden;
 }
 
@@ -50,7 +50,7 @@ html, body {
   letter-spacing: 0.18em;
 }
 .hud .title {
-  font-family: 'Major Mono Display', monospace;
+  font-family: 'Orbitron', monospace;
   font-size: 22px;
   color: var(--neon);
   text-shadow: 0 0 12px rgba(255,45,111,0.7);
@@ -126,7 +126,7 @@ html, body {
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.4s;
-  font-family: 'Major Mono Display', monospace;
+  font-family: 'Orbitron', monospace;
 }
 .banner.show { opacity: 1; }
 .banner .big {
@@ -140,7 +140,7 @@ html, body {
   color: var(--ink);
   margin-top: 10px;
   letter-spacing: 0.2em;
-  font-family: 'VT323', monospace;
+  font-family: 'JetBrains Mono', monospace;
 }
 
 /* Level toast — small, bottom-center, non-obstructing */
@@ -166,7 +166,7 @@ html, body {
   transform: translate(-50%, 0);
 }
 .intro .level-tag {
-  font-family: 'Major Mono Display', monospace;
+  font-family: 'Orbitron', monospace;
   color: var(--neon);
   font-size: 14px;
   letter-spacing: 0.35em;
@@ -174,7 +174,7 @@ html, body {
   padding-left: 0.35em;
 }
 .intro .title {
-  font-family: 'Major Mono Display', monospace;
+  font-family: 'Orbitron', monospace;
   font-size: 18px;
   letter-spacing: 0.2em;
   color: var(--ink);
@@ -201,7 +201,7 @@ html, body {
   align-items: center;
   justify-content: center;
   background: rgba(5,6,10,0.55);
-  font-family: 'Major Mono Display', monospace;
+  font-family: 'Orbitron', monospace;
   color: var(--neon);
   text-shadow: 0 0 14px rgba(255,45,111,0.8);
   font-size: 56px;
@@ -213,7 +213,7 @@ html, body {
 .death.show { opacity: 1; }
 .death .respawn {
   margin-top: 18px;
-  font-family: 'VT323', monospace;
+  font-family: 'JetBrains Mono', monospace;
   font-size: 26px;
   color: var(--neon-2);
   text-shadow: 0 0 8px rgba(0,255,224,0.5);
@@ -221,7 +221,7 @@ html, body {
 }
 .death .run-stats {
   margin-top: 14px;
-  font-family: 'VT323', monospace;
+  font-family: 'JetBrains Mono', monospace;
   font-size: 22px;
   color: var(--dim);
   letter-spacing: 0.18em;
@@ -247,7 +247,7 @@ html, body {
   color: var(--neon-2);
   padding: 0 6px;
   border-radius: 3px;
-  font-family: 'VT323', monospace;
+  font-family: 'JetBrains Mono', monospace;
 }
 
 /* Loading overlay (dictionary fetch) */
@@ -266,7 +266,7 @@ html, body {
 .loading.show { opacity: 1; pointer-events: auto; }
 .loading-card { text-align: center; }
 .loading-title {
-  font-family: 'Major Mono Display', monospace;
+  font-family: 'Orbitron', monospace;
   font-size: 36px;
   letter-spacing: 0.3em;
   color: var(--neon);
@@ -319,7 +319,7 @@ html, body {
   box-shadow: 0 0 60px rgba(255,45,111,0.12);
 }
 .lobby-title {
-  font-family: 'Major Mono Display', monospace;
+  font-family: 'Orbitron', monospace;
   font-size: 38px;
   letter-spacing: 0.28em;
   color: var(--neon);
@@ -339,7 +339,7 @@ html, body {
   background: rgba(0,0,0,0.4);
   border: 1px solid rgba(0,255,224,0.3);
   color: var(--ink);
-  font-family: 'VT323', monospace;
+  font-family: 'JetBrains Mono', monospace;
   font-size: 22px;
   letter-spacing: 0.1em;
   padding: 8px 12px;
@@ -358,7 +358,7 @@ html, body {
   background: rgba(255,45,111,0.12);
   border: 1px solid var(--neon);
   color: var(--neon);
-  font-family: 'VT323', monospace;
+  font-family: 'JetBrains Mono', monospace;
   font-size: 22px;
   letter-spacing: 0.18em;
   padding: 10px;
@@ -396,7 +396,7 @@ html, body {
 }
 .lobby-status {
   color: var(--neon-2);
-  font-family: 'VT323', monospace;
+  font-family: 'JetBrains Mono', monospace;
   font-size: 18px;
   margin-top: 14px;
   letter-spacing: 0.1em;
@@ -404,7 +404,7 @@ html, body {
 }
 .lobby-status.error { color: var(--neon); }
 .lobby-code {
-  font-family: 'VT323', monospace;
+  font-family: 'JetBrains Mono', monospace;
   font-size: 56px;
   font-weight: normal;
   letter-spacing: 0.25em;
@@ -429,7 +429,7 @@ html, body {
   top: 16px; left: 18px;
   z-index: 11;
   pointer-events: none;
-  font-family: 'VT323', monospace;
+  font-family: 'JetBrains Mono', monospace;
   font-size: 16px;
   letter-spacing: 0.1em;
   color: var(--neon-2);
@@ -465,7 +465,7 @@ html, body {
   z-index: 10;
   pointer-events: none;
   text-align: center;
-  font-family: 'Major Mono Display', monospace;
+  font-family: 'Orbitron', monospace;
   user-select: none;
 }
 .highscore .label {

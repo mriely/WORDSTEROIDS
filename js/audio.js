@@ -116,7 +116,7 @@ function showAudioToast(msg) {
     el.id = 'audioToast';
     el.style.cssText = `
       position:absolute; bottom:200px; right:20px; z-index:10;
-      font-family: 'VT323', monospace; font-size:18px;
+      font-family: 'JetBrains Mono', monospace; font-size:18px;
       color: var(--neon-2); letter-spacing: 0.18em;
       text-shadow: 0 0 8px rgba(0,255,224,0.5);
       padding: 6px 14px; background: rgba(5,6,10,0.7);

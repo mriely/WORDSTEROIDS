@@ -56,7 +56,7 @@ const POWERUP_DEFS = {
   },
   blast: {
     name: 'BLAST', color: '#d65bff', tier: 1,
-    desc: 'fire = short-range shockwave.',
+    desc: 'fire = omnidirectional shockwave. wider at higher level.',
     duration: 30,
     type: 'weapon',
   },
@@ -460,7 +460,7 @@ function drawFromSnapshot() {
     ctx.fillStyle = '#05060a';
     ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = '#00ffe0';
-    ctx.font = '24px VT323, monospace';
+    ctx.font = '24px JetBrains Mono, monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('waiting for first snapshot...', W / 2, H / 2);
@@ -518,7 +518,7 @@ function drawFromSnapshot() {
     ctx.fillStyle = '#05060a';
     ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = '#00ffe0';
-    ctx.font = '24px VT323, monospace';
+    ctx.font = '24px JetBrains Mono, monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('connected — waiting for spawn...', W / 2, H / 2);

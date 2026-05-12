@@ -238,10 +238,12 @@ class Ship {
     }
 
     if (isBlast) {
-      // Short-range omnidirectional shockwave. Slightly longer cooldown.
+      // Omnidirectional shockwave. Radius scales with the firer's personal
+      // level so high-level players get a meaningfully wider blast.
       this.fireCooldown = 0.45;
-      const radius = 120;
-      for (const s of [player, ...bots]) {
+      const radius = Math.min(420, 180 + 25 * ((this.level || 1) - 1));
+      const targets = remotePlayer ? [player, remotePlayer, ...bots] : [player, ...bots];
+      for (const s of targets) {
         if (!s.alive || s === this) continue;
         const dx = wrapDelta(this.x, s.x, WORLD.w);
         const dy = wrapDelta(this.y, s.y, WORLD.h);

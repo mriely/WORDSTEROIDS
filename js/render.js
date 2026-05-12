@@ -83,13 +83,13 @@ function draw() {
     ctx.shadowBlur = 0;
     // letter inside
     ctx.fillStyle = '#0a0d18';
-    ctx.font = 'bold 12px VT323, monospace';
+    ctx.font = 'bold 12px JetBrains Mono, monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(def.name[0], sx, sy + bob + 1);
 
     // Price tag below the orb
-    ctx.font = '14px VT323, monospace';
+    ctx.font = '14px JetBrains Mono, monospace';
     ctx.fillStyle = def.color;
     ctx.shadowColor = def.color;
     ctx.shadowBlur = 6;
@@ -106,7 +106,7 @@ function draw() {
         ctx.fillStyle = '#ff2d6f';
         ctx.shadowColor = '#ff2d6f';
         ctx.shadowBlur = 8;
-        ctx.font = 'bold 16px VT323, monospace';
+        ctx.font = 'bold 16px JetBrains Mono, monospace';
         ctx.fillText(`NEED LEVEL ${p.rejectNeed}`, sx, sy + bob - 28 - (1 - a) * 14);
         ctx.globalAlpha = 1;
         ctx.shadowBlur = 0;
@@ -543,7 +543,7 @@ function drawShip(s, cam) {
 
   // Words on edges (font scales gently with ship size)
   const edgeFontSize = Math.max(14, Math.round(size * 0.30));
-  ctx.font = `${edgeFontSize}px VT323, monospace`;
+  ctx.font = `${edgeFontSize}px JetBrains Mono, monospace`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
@@ -587,7 +587,7 @@ function drawShip(s, cam) {
     drawEdgeWord(w.fire, sx, sy - 6, true);
     // Bots show just the name inside the square (score is on the leaderboard)
     const nameFontSize = Math.max(10, Math.round(size * 0.18));
-    ctx.font = `${nameFontSize}px VT323, monospace`;
+    ctx.font = `${nameFontSize}px JetBrains Mono, monospace`;
     ctx.fillStyle = isKingShip ? '#ffd23f' : 'rgba(230,241,255,0.55)';
     ctx.fillText(s.name, sx, sy + half - nameFontSize * 0.8);
   }
@@ -608,7 +608,7 @@ function drawMinimap() {
   ctx.lineWidth = 1;
   ctx.strokeRect(x+0.5, y+0.5, mw-1, mh-1);
   ctx.fillStyle = 'rgba(107,122,153,0.9)';
-  ctx.font = '12px VT323, monospace';
+  ctx.font = '12px JetBrains Mono, monospace';
   ctx.textAlign = 'left';
   ctx.fillText('// minimap', x+6, y+14);
 
