@@ -1632,10 +1632,15 @@ function init() {
   });
 
   if (NET.mode === 'host') {
-    // Add the joiner as a second human ship (host-side)
+    // Add the joiner as a second human ship (host-side). Spawn near the host's
+    // player (~600px offset) so both players can find each other immediately
+    // at game start instead of being scattered randomly across a huge world.
+    const offsetAngle = Math.random() * Math.PI * 2;
+    const offsetDist = 600;
     remotePlayer = new Ship({
       id: 'r', name: NET.remoteName, isPlayer: true, // isPlayer=true for collision/scoring
-      x: Math.random() * WORLD.w, y: Math.random() * WORLD.h,
+      x: player.x + Math.cos(offsetAngle) * offsetDist,
+      y: player.y + Math.sin(offsetAngle) * offsetDist,
       color: '#ff2d6f',
     });
     remotePlayer.isRemote = true; // tag so we skip local input handling
