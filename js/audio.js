@@ -1,9 +1,12 @@
 // ============================================================
 // AUDIO — background music playlist
 // ============================================================
+// Served from the same GitHub Pages origin as the HTML. We used to load these
+// from jsDelivr, but it cached a broken 199-byte stub for a week and silently
+// killed music in prod. Same-origin avoids the CDN cache and the CORS dance.
 const TRACK_URLS = [
-  'https://cdn.jsdelivr.net/gh/mriely/WORDSTEROIDS@main/wordsteroids2.mp3',
-  'https://cdn.jsdelivr.net/gh/mriely/WORDSTEROIDS@main/wordsteroids3.mp3',
+  'wordsteroids2.mp3',
+  'wordsteroids3.mp3',
 ];
 
 const audio = {
@@ -29,7 +32,6 @@ function audioInit() {
   audio.el = new Audio();
   audio.el.volume = audio.volume;
   audio.el.preload = 'auto';
-  audio.el.crossOrigin = 'anonymous';
   audio.failedTracks = new Set();
   audio.el.addEventListener('ended', audioNext);
   audio.el.addEventListener('error', () => {
