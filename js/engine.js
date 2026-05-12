@@ -530,9 +530,13 @@ function drawFromSnapshot() {
   // and treats them as the player ship for HUD/leaderboard etc.
   for (const s of stubs) s.isPlayer = (s.id === 'r');
 
-  // Bullets: preserve isNuke/nukeRadius for proper rendering
+  // Bullets: preserve isNuke/nukeRadius for proper rendering. Dead-reckon
+  // position too — bullets travel ~520u/s so without this they step ~26u
+  // per snapshot at 20Hz, which reads as visible jitter.
   const stubBullets = state.bullets.map(b => ({
-    x: b.x, y: b.y, color: b.c, isKing: !!b.k, fx: b.fx, fy: b.fy,
+    x: wrapPos(b.x + (b.vx || 0) * dtSnap, state.worldW),
+    y: wrapPos(b.y + (b.vy || 0) * dtSnap, state.worldH),
+    color: b.c, isKing: !!b.k, fx: b.fx, fy: b.fy,
     isNuke: !!b.nk, nukeRadius: b.nr || 0,
     isGiant: !!b.g, giantRadius: b.gr || 0,
   }));
