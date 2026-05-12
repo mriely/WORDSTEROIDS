@@ -674,7 +674,7 @@ window.addEventListener('resize', resize);
 resize();
 
 // World grows with level. BASE_WORLD is the level-1 size; WORLD is current.
-const BASE_WORLD = { w: 4000, h: 3000 };
+const BASE_WORLD = { w: 6000, h: 4500 };
 const WORLD = { w: BASE_WORLD.w, h: BASE_WORLD.h };
 const WORLD_GROWTH_PER_LEVEL = 0.15; // 15% bigger per level (linear)
 
@@ -1154,10 +1154,13 @@ class Ship {
 
   applyPowerup(key) {
     const def = POWERUP_DEFS[key];
-    // Shield is special: lasts until consumed by a hit (no time limit)
-    const expiresAt = key === 'shield' ? Infinity : performance.now() + def.duration * 1000;
-    this.activePowerup = { key, expiresAt };
-    if (key === 'shield') this.shieldHP = 1;
+    if (key === 'shield') {
+      // SHIELD stacks with any other active powerup. It only sets shieldHP
+      // (absorbs one hit, persists until consumed) and never touches activePowerup.
+      this.shieldHP = Math.max(this.shieldHP, 1);
+      return;
+    }
+    this.activePowerup = { key, expiresAt: performance.now() + def.duration * 1000 };
   }
 
   damage(byShip) {
@@ -1171,8 +1174,6 @@ class Ship {
     if (this.shieldHP > 0) {
       this.shieldHP -= 1;
       this.flashAt = performance.now();
-      // shield popped: remove the active shield powerup
-      if (this.activePowerup && this.activePowerup.key === 'shield') this.activePowerup = null;
       // small particle puff in cyan
       spawnExplosion(this.x, this.y, '#00ffe0', 12);
       return false; // damage absorbed
@@ -1188,16 +1189,22 @@ class Ship {
       // Regicide bounty: killing the king is worth 5 points instead of 1.
       const wasKing = king && king.id === this.id;
       byShip.score += wasKing ? 5 : 1;
-      // Kill-reward shield. VAMPIRE makes it longer + resets fire cooldown.
+      // Kill-reward: 3-second time-based invulnerability.
+      byShip.killShieldUntil = performance.now() + 3000;
+      // VAMPIRE: every kill grants a fresh persistent shield (absorbs one hit,
+      // lasts until consumed) AND resets fire cooldown for chain kills.
       const isVampire = byShip.activePowerup && byShip.activePowerup.key === 'vampire';
-      const shieldMs = isVampire ? 5000 : 3000;
-      byShip.killShieldUntil = performance.now() + shieldMs;
-      if (isVampire) byShip.fireCooldown = 0; // chain kills
+      if (isVampire) {
+        byShip.shieldHP = Math.max(byShip.shieldHP, 1);
+        byShip.fireCooldown = 0; // chain kills
+      }
     }
     spawnExplosion(this.x, this.y, this.stealth ? '#888' : this.color, 24);
     const lostScore = this.score;
     const lostLevel = this.level;
-    if (this.isPlayer) showDeath(lostScore, lostLevel);
+    // Death overlay only fires for the local player (not the remote/joiner
+    // ship, which is also marked isPlayer:true on the host for scoring purposes).
+    if (this === player) showDeath(lostScore, lostLevel);
     if (king && king.id === this.id) king = null;
     // Drop active powerup as a pickup at death location, if any
     if (this.activePowerup && POWERUP_DEFS[this.activePowerup.key]) {
@@ -1229,7 +1236,7 @@ class Ship {
     // 3-second spawn invulnerability so you don't get instakilled appearing
     this.killShieldUntil = performance.now() + 3000;
     this.resetWords();
-    if (this.isPlayer) hideDeath();
+    if (this === player) hideDeath();
   }
 
   thrust(dx, dy) {
@@ -1409,8 +1416,8 @@ class Ship {
           // Remember where it was collected so the next spawn can be far away
           lastPickupLocation = { x: p.x, y: p.y };
           pickups.splice(i, 1);
-          if (this.isPlayer) flashScreen(def.color, 0.2);
-        } else if (this.isPlayer) {
+          if (this === player) flashScreen(def.color, 0.2);
+        } else if (this === player) {
           // floating "NEED LEVEL N" text
           if (!p.rejectFlashAt || performance.now() - p.rejectFlashAt > 800) {
             p.rejectFlashAt = performance.now();
@@ -1518,7 +1525,14 @@ const MIN_SPAWN_DISTANCE = 1200; // wrap-aware min distance from last pickup
 
 function spawnRandomPickup() {
   const allKeys = Object.keys(POWERUP_DEFS);
-  const key = randFrom(allKeys);
+  // Determine if a tier-1 pickup is already on the map. If not, this spawn
+  // must be tier 1 so beginners always have an accessible powerup available.
+  const hasTier1 = pickups.some(p => POWERUP_DEFS[p.key] && POWERUP_DEFS[p.key].tier === 1);
+  let candidates = allKeys;
+  if (!hasTier1) {
+    candidates = allKeys.filter(k => POWERUP_DEFS[k].tier === 1);
+  }
+  const key = randFrom(candidates);
   // Pick a location far from the previously collected pickup (if any)
   let x, y;
   let attempts = 0;
@@ -1534,7 +1548,7 @@ function spawnRandomPickup() {
 }
 let pickupTimer = 0;
 const PICKUP_RESPAWN_DELAY = 4; // seconds after one is collected before next appears
-const MAX_PICKUPS = 1;
+const MAX_PICKUPS = 3;
 
 // ----- Game state -----
 let level = 1;
@@ -2054,8 +2068,8 @@ function loop() {
       }
     }
 
-    // Pickup spawning: 1 on the map at a time, persists until bought or expired.
-    if (pickups.length === 0) {
+    // Pickup spawning: top up to MAX_PICKUPS on the map at a time.
+    if (pickups.length < MAX_PICKUPS) {
       pickupTimer += dt;
       if (pickupTimer >= PICKUP_RESPAWN_DELAY) {
         pickupTimer = 0;
@@ -2738,11 +2752,24 @@ function drawMinimap() {
     const dx = x + s.x * sx;
     const dy = y + s.y * sy;
     const isKingShip = (king && king.id === s.id);
-    ctx.fillStyle = isKingShip ? '#ffd23f' : s.color;
-    const r = s.isPlayer ? 3 : (isKingShip ? 3 : 2);
-    ctx.beginPath();
-    ctx.arc(dx, dy, r, 0, Math.PI*2);
-    ctx.fill();
+    const fill = isKingShip ? '#ffd23f' : s.color;
+    if (s.isPlayer) {
+      // Humans: filled square with a thin white outline. Local player slightly
+      // larger than remote so you can always identify yourself at a glance.
+      const half = s === player ? 4 : 3.5;
+      ctx.fillStyle = fill;
+      ctx.fillRect(dx - half, dy - half, half * 2, half * 2);
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(dx - half, dy - half, half * 2, half * 2);
+    } else {
+      // Bots: small filled circle in ship color.
+      const r = isKingShip ? 3 : 2;
+      ctx.fillStyle = fill;
+      ctx.beginPath();
+      ctx.arc(dx, dy, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   // viewport rectangle (handles wrap by drawing up to 4 copies)
