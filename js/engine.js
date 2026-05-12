@@ -400,39 +400,33 @@ function handlePlayerTyping(shift) {
     { word: w.fire,  action: () => exec('fire', 0, 0) },
   ];
 
-  // Credit one correct letter to the local player. Joiner's letters are
-  // credited host-side via applyRemoteInput when each action completes.
-  const creditLocal = () => {
-    if (NET.mode !== 'joiner' && player) player.creditCorrectLetters(1);
-  };
-
-  // Complete match — fire the action.
+  // Complete match — fire the action and credit the full word length.
+  // Partial typing (prefix progress, smart reroute) earns NO passive points
+  // so players can't farm score by spamming letters of unfinished words.
   for (const c of candidates) {
     if (typedBuffer === c.word) {
       c.action();
-      if (NET.mode !== 'joiner') refreshWordSlot(player, c.word);
-      creditLocal();
+      if (NET.mode !== 'joiner') {
+        refreshWordSlot(player, c.word);
+        player.creditCorrectLetters(c.word.length);
+      }
       typedBuffer = '';
       return;
     }
   }
 
-  // Buffer still a valid prefix of some word — keep typing.
-  if (candidates.some(c => c.word.startsWith(typedBuffer))) {
-    creditLocal();
-    return;
-  }
+  // Buffer still a valid prefix of some word — keep typing (no credit yet).
+  if (candidates.some(c => c.word.startsWith(typedBuffer))) return;
 
-  // Wrong letter for the current word — but if the just-typed character is
-  // the first letter of another word, jump to typing that word instead.
+  // Wrong letter — but if it starts another word, jump to typing that one.
+  // No credit because the abandoned word wasn't completed.
   const lastChar = typedBuffer.slice(-1);
   if (lastChar && candidates.some(c => c.word.startsWith(lastChar))) {
     typedBuffer = lastChar;
-    creditLocal();
     return;
   }
 
-  // Otherwise the keystroke was junk — drop everything, no credit.
+  // Otherwise the keystroke was junk — drop everything.
   typedBuffer = '';
 }
 
