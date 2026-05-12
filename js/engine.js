@@ -143,6 +143,10 @@ function sizeForScore(score, baseSize, maxSize) {
 
 // Display helper — show 1 decimal place
 function fmtScore(s) { return s.toFixed(1); }
+// 2-decimal variant used ONLY for the local player's own live HUD score, so
+// the player can see their fine-grained 0.02-per-letter progress. Leaderboard,
+// bots, and remote players stay at 1 decimal to keep the table tidy.
+function fmtScoreSelf(s) { return s.toFixed(2); }
 
 // ----- Game state -----
 let level = 1;
@@ -488,7 +492,7 @@ function drawFromSnapshot() {
     color: sh.col,
     isPlayer: !!sh.ip,
     level: sh.lv || 1,
-    activePowerup: sh.pu ? { key: sh.pu, expiresAt: performance.now() + 20000 } : null,
+    activePowerup: sh.pu ? { key: sh.pu, expiresAt: performance.now() + (sh.puMs || 0) } : null,
     shieldHP: sh.shp || 0,
     killShieldUntil: sh.ksU || 0,
     fireCooldown: 0,
@@ -758,7 +762,7 @@ function loop() {
     updateKing(dt);
     if (king) {
       kingTimer += dt;
-      if (kingTimer >= 3) { kingTimer = 0; king.score = Math.round((king.score + 0.1) * 10) / 10; }
+      if (kingTimer >= 3) { kingTimer = 0; king.score = Math.round((king.score + 0.1) * 100) / 100; }
     }
 
     // High score check (covers kills, KOTH ticks, and any other score change)

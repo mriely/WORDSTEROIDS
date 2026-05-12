@@ -290,6 +290,9 @@ function broadcastSnapshot() {
       ld: s.lastDir,
       ws: s.words, // words for showing on remote ships
       pu: s.activePowerup ? s.activePowerup.key : null,
+      // Remaining ms on the host's clock. Joiner rebuilds expiresAt against its
+      // own performance.now(), since the two browsers' clocks don't line up.
+      puMs: s.activePowerup ? Math.max(0, s.activePowerup.expiresAt - now) : 0,
       shp: s.shieldHP,
       ksU: s.killShieldUntil,
       col: s.color,

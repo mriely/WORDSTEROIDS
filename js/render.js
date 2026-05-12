@@ -717,7 +717,7 @@ function updateHUD() {
   levelText.textContent = cfg.label;
   // Top-center shows the player's LIVE score.
   const myScore = (player && player.score) || 0;
-  highscoreValueEl.textContent = fmtScore(myScore);
+  highscoreValueEl.textContent = fmtScoreSelf(myScore);
   // Glow effect when the live score is at-or-above the prior best — meaning
   // the player is currently sitting on a new high score.
   const beating = player && player.alive && myScore > 0 && myScore >= priorHighScore;

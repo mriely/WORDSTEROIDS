@@ -404,9 +404,10 @@ html, body {
 }
 .lobby-status.error { color: var(--neon); }
 .lobby-code {
-  font-family: 'Major Mono Display', monospace;
-  font-size: 32px;
-  letter-spacing: 0.2em;
+  font-family: 'VT323', monospace;
+  font-size: 56px;
+  font-weight: normal;
+  letter-spacing: 0.25em;
   color: var(--neon-3);
   text-shadow: 0 0 10px rgba(255,210,63,0.5);
   margin: 14px 0;

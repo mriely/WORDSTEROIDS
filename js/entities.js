@@ -29,18 +29,12 @@ class Ship {
     this.shieldHP = 0; // shield consumes a hit
     // Spawn invulnerability — 3 seconds so you can orient before getting shot
     this.killShieldUntil = performance.now() + 3000;
-    // Passive score from correct typing — every 5 letters granted to this
-    // ship (per-keystroke for the player, per-action-word-length for bots /
-    // joiners) buys +0.1 score.
-    this.correctLettersTyped = 0;
   }
 
+  // Awarded on each completed action word: 0.02 score per letter.
+  // Partial typing earns nothing (callers only invoke this on completion).
   creditCorrectLetters(n) {
-    this.correctLettersTyped += n;
-    while (this.correctLettersTyped >= 5) {
-      this.correctLettersTyped -= 5;
-      this.score = Math.round((this.score + 0.1) * 10) / 10;
-    }
+    this.score = Math.round((this.score + n * 0.02) * 100) / 100;
   }
 
   isKing() { return king && king.id === this.id; }
