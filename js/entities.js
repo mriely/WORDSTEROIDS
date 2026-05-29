@@ -69,16 +69,17 @@ class Ship {
       this.shieldHP = Math.max(this.shieldHP, 1);
       return;
     }
-    // Duration scales with the firer's personal level: 10s per level.
-    // Level 1 = 10s, level 3 = 30s (the old default), level 10 = 100s.
+    // Duration scales with the firer's personal level: 20s at level 1,
+    // +10s per level after. Level 1 = 20s, level 4 = 50s, level 10 = 110s.
     // Snapshot the total so the HUD bar uses the same value even if the
     // ship levels up mid-effect.
-    const totalSec = this.level * 10;
+    const totalSec = 20 + 10 * Math.max(0, (this.level || 1) - 1);
     this.activePowerup = {
       key,
       expiresAt: performance.now() + totalSec * 1000,
       totalSec,
     };
+    if (this === player) sfxPickup();
   }
 
   damage(byShip) {
@@ -94,6 +95,7 @@ class Ship {
       this.flashAt = performance.now();
       // small particle puff in cyan
       spawnExplosion(this.x, this.y, '#00ffe0', 12);
+      if (this === player) sfxShieldHit();
       return false; // damage absorbed
     }
     this.die(byShip);
@@ -103,6 +105,9 @@ class Ship {
   die(byShip) {
     this.alive = false;
     this.respawnAt = performance.now() + 3000;
+    // SFX: distinct sounds for your own death (big) vs. confirming a kill (snappy)
+    if (this === player) sfxDeath();
+    else if (byShip === player) sfxKill();
     if (byShip) {
       // Regicide bounty: killing the king is worth 5 points instead of 1.
       const wasKing = king && king.id === this.id;
@@ -177,6 +182,7 @@ class Ship {
     this.lastDir = { x: dx, y: dy };
     this.thrustAt = performance.now();
     if (this.isPlayer) this.actionPulseAt = performance.now();
+    if (this === player) sfxThrust();
   }
 
   // Change facing/firing direction without applying thrust (shift+word).
@@ -184,11 +190,13 @@ class Ship {
     this.lastDir = { x: dx, y: dy };
     this.thrustAt = performance.now(); // reuse the thrust glow for the brief edge highlight
     if (this.isPlayer) this.actionPulseAt = performance.now();
+    if (this === player) sfxAim();
   }
 
   fire() {
     if (this.fireCooldown > 0) return;
     if (this.isPlayer) this.actionPulseAt = performance.now();
+    if (this === player) sfxFire();
     const isKing = this.isKing();
     const apk = this.activePowerup ? this.activePowerup.key : null;
     const isSpread = apk === 'spread';

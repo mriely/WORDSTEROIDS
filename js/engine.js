@@ -337,10 +337,14 @@ function spawnWordSparkle(x, y) {
 window.addEventListener('keydown', (e) => {
   // Audio: kick off playback on first interaction (browsers block autoplay)
   audioStartIfPending();
+  // SFX needs the same user-gesture treatment to allow its AudioContext to run.
+  sfxInit();
+  sfxResume();
 
   // Audio controls (use punctuation so they don't conflict with typing letters)
   if (e.key === '\\' || e.key === '|') {
     audioToggleMute();
+    sfxToggleMute();
     return;
   }
   if (e.key === '=' || e.key === '+') {
@@ -455,6 +459,7 @@ function handlePlayerTyping(shift) {
         player.creditCorrectLetters(c.word.length);
         spawnWordSparkle(player.x, player.y);
       }
+      sfxWord();
       typedBuffer = '';
       return;
     }
@@ -838,7 +843,7 @@ function loop() {
           // recompute world size + show banner
           if (s.isPlayer) {
             if (s.level > level) topHumanLevelChanged = true;
-            if (s === player) showLevelIntro(); // local player's level-up gets banner
+            if (s === player) { showLevelIntro(); sfxLevelUp(); } // local player's level-up gets banner + chord
           }
         } else break;
       }
