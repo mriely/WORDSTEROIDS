@@ -646,6 +646,15 @@ function drawFromSnapshot() {
   }
 }
 
+// rAF stops when the browser tab is hidden, which in multiplayer was freezing
+// the host's authoritative sim and dragging the joiner with it. Fall back to
+// setTimeout when hidden — browsers throttle it (usually to 1Hz) but at least
+// the loop keeps ticking and snapshots keep flowing.
+function scheduleLoop() {
+  if (document.hidden) setTimeout(loop, 16);
+  else requestAnimationFrame(loop);
+}
+
 function loop() {
   const now = performance.now();
   const dt = paused ? 0 : Math.min(0.05, (now - lastT) / 1000);
@@ -654,7 +663,7 @@ function loop() {
   // ---- JOINER MODE: skip simulation, render from latest snapshot ----
   if (NET.mode === 'joiner') {
     drawFromSnapshot();
-    requestAnimationFrame(loop);
+    scheduleLoop();
     return;
   }
 
@@ -844,7 +853,7 @@ function loop() {
 
   draw();
   updateHUD();
-  requestAnimationFrame(loop);
+  scheduleLoop();
 }
 
 function updateKing(dt) {

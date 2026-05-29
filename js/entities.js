@@ -161,9 +161,11 @@ class Ship {
 
   thrust(dx, dy) {
     const boosted = this.activePowerup && this.activePowerup.key === 'boost';
-    // BOOST doubles the per-thrust impulse (110 → 220) so you accelerate faster,
-    // but the safety speed ceiling is the same for everyone.
-    const speed = boosted ? 220 : 110;
+    // BOOST doubles the per-thrust impulse (110 → 220). On top of that, the
+    // base impulse grows ~5% per personal level so high-level ships feel
+    // snappier. Safety speed ceiling below is the same for everyone.
+    const levelScale = 1 + Math.max(0, (this.level || 1) - 1) * 0.05;
+    const speed = (boosted ? 220 : 110) * levelScale;
     this.vx += dx * speed;
     this.vy += dy * speed;
     // High safety ceiling: only here to prevent ships from teleporting through

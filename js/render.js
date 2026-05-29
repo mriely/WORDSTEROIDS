@@ -151,9 +151,10 @@ function draw() {
 
   // bullets
   for (const b of bullets) {
-    // Per-viewer visibility: skip bullets whose fire origin was outside
-    // the local viewport. Each client checks against its own camera/player.
-    if (b.fx !== undefined && b.fy !== undefined && !isOnPlayerScreen(b.fx, b.fy)) continue;
+    // (Removed fire-origin visibility cull — it hid bullets from any ship the
+    // viewer wasn't currently looking at, which broke multiplayer because
+    // distant players never saw each other's fire. The per-position cull
+    // below already handles "is this bullet on screen right now".)
     const sxw = wrapDelta(cam.x + W/2, b.x, WORLD.w);
     const syw = wrapDelta(cam.y + H/2, b.y, WORLD.h);
     const sx = W/2 + sxw;
@@ -763,10 +764,13 @@ function updateHUD() {
   const allShips = remotePlayer ? [player, remotePlayer, ...bots] : [player, ...bots];
   const ships = allShips.slice().sort((a,b) => b.score - a.score);
   // Rebuild the whole leaderboard, including the high-row at the top.
+  const holderTag = highScoreName
+    ? ` <span style="color: rgba(255,220,130,0.6); font-size: 12px; letter-spacing: 0.15em; margin-left: 6px;">· ${highScoreName}</span>`
+    : '';
   let html = `
     <div class="high-row">
       <span class="high-label">// all-time high</span>
-      <span class="high-value">${fmtScore(highScore)}</span>
+      <span class="high-value">${fmtScore(highScore)}</span>${holderTag}
     </div>
     <h3>// leaderboard</h3>
   `;
@@ -859,7 +863,9 @@ function hideDeath() {
 
 // ----- High Score (persisted) -----
 const HIGHSCORE_KEY = 'wordsteroids:highscore';
+const HIGHSCORE_NAME_KEY = 'wordsteroids:highscore:name';
 let highScore = 0;
+let highScoreName = ''; // who set the current all-time high
 let priorHighScore = 0; // captured at game start / after death — basis for "actively beating it"
 const highscoreEl = document.getElementById('highscore');
 const highscoreValueEl = document.getElementById('highscoreValue');
@@ -872,6 +878,8 @@ async function loadHighScore() {
       const parsed = parseFloat(result.value);
       if (!isNaN(parsed)) highScore = parsed;
     }
+    const nameResult = await window.storage.get(HIGHSCORE_NAME_KEY);
+    if (nameResult && nameResult.value) highScoreName = String(nameResult.value);
   } catch (e) {
     // Key doesn't exist yet, or storage unavailable — start at 0
   }
@@ -882,6 +890,7 @@ async function saveHighScore() {
   try {
     if (typeof window.storage === 'undefined') return;
     await window.storage.set(HIGHSCORE_KEY, String(highScore));
+    await window.storage.set(HIGHSCORE_NAME_KEY, highScoreName);
   } catch (e) {
     // Storage unavailable — score is in-memory only this session
   }
@@ -890,6 +899,7 @@ async function saveHighScore() {
 function maybeUpdateHighScore() {
   if (player.score > highScore) {
     highScore = player.score;
+    highScoreName = (player && player.name) ? player.name : '';
     // Trigger celebration pulse on the live score display
     highscoreEl.classList.remove('beat');
     void highscoreEl.offsetWidth; // restart animation
